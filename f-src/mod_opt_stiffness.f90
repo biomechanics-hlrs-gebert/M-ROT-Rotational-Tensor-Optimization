@@ -5,100 +5,101 @@
 !-- author:                Johannes Gebert        (HLRS, NUM)
 !-- numeric kernel by:     Ralf Schneider         (HLRS, NUM)
 !--
-!-- mod  27.06.2020        Previous programs ignored
+!-- mod 27.06.2020         Previous programs ignored
+!-- mod 06.03.2021
 !--
 !----------------------------------------------------------------------------------------------
 
-module opt_stiffness
+MODULE opt_stiffness
 
-use kinds
-use mat_matrices
+USE standards
+USE math_routines
 
-Implicit None
+IMPLICIT NONE
 
-    contains
+CONTAINS
 
-    subroutine opt_eff_stiff (mode,EE,deg_a,stp_a,deg_p,stp_p,deg_e,stp_e,intervall,opt_tensor,a,p,e,outp)
+  SUBROUTINE opt_eff_stiff (mode, EE, deg_a, stp_a, deg_p, stp_p, deg_e, stp_e, intervall, &
+       opt_tensor, a, p, e, outp)
 
-    !-- Choose monotropic OR otrhotropic optimization 
+    !-- Choose monotropic OR otrhotropic optimization
     !-- Initial degrees must be integer!
     !-- Change mode to strings - way more convenient
 
-    integer(kind=ik), intent(in)                               :: mode                        ! Switch between mono=1 and orth=2
-    real(kind=rk), dimension(6,6), intent(in)                  :: EE                          ! Tensor to opimise
-    integer(kind=rk), intent(in)                               :: deg_a, deg_e, deg_p         ! orientation to start with
-    integer(kind=rk), intent(in)                               :: stp_a, stp_e, stp_p         ! Amount of steps to increase
-    real(kind=rk), intent(in), optional                        :: intervall                   ! stepwidth
-    real(kind=rk), dimension(6,6), intent(out), optional       :: opt_tensor                  ! optimised tensor - should be a mandatory one
-    real(kind=rk), intent(out), optional                       :: a,p,e                       ! resulting angles
-    logical, intent(in), optional                              :: outp                        ! check whether print result
+    INTEGER(KIND=ik), INTENT(in)                                           :: mode                        ! mono=1 and orth=2
+    REAL   (KIND=rk), INTENT(in)           , DIMENSION(6,6)                :: EE                          ! Tensor to opimise
+    INTEGER(KIND=rk), INTENT(in)                                           :: deg_a, deg_e, deg_p         ! orientation to start with
+    INTEGER(KIND=rk), INTENT(in)                                           :: stp_a, stp_e, stp_p         ! Amount of steps to increase
+    REAL   (KIND=rk), INTENT(in) , OPTIONAL                                :: intervall                   ! stepwidth
+    REAL   (KIND=rk), INTENT(out), OPTIONAL, DIMENSION(6,6)                :: opt_tensor                  ! optimised tensor
+    REAL   (KIND=rk), INTENT(out), OPTIONAL                                :: a,p,e                       ! resulting angles
+    LOGICAL         , INTENT(in) , OPTIONAL                                :: outp                        ! check whether print result
 
     !----------------------------------------------------------------------------------------------
 
-    real(kind=ik)                                              :: kk,   kk_phi,   kk_eta
-    real(kind=rk)                                              :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
-    integer(kind=ik)                                           :: ii, ii_phi, ii_eta, sw1, sw2
-    integer(kind=ik)                                           :: ii_c, ii_phi_c, ii_eta_c
-    real(kind=rk)                                              :: alpha, phi, eta
-    real(kind=rk)                                              :: min, intval
-    real(kind=rk), dimension(3)                                :: n
-    real(kind=rk), dimension(3,3)                              :: aa
-    real(kind=rk), dimension(6,6)                              :: BB, tmp_r6x6
-    real(kind=rk), dimension(:,:,:), allocatable               :: crit
-    logical                                                    :: op=.FALSE.
-    character(len=50)                                          :: opt_str
+    REAL   (KIND=rk)                                                       :: kk,   kk_phi,   kk_eta
+    REAL   (KIND=rk)                                                       :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
+    INTEGER(KIND=ik)                                                       :: ii, ii_phi, ii_eta, sw1, sw2
+    INTEGER(KIND=ik)                                                       :: ii_c, ii_phi_c, ii_eta_c
+    REAL   (KIND=rk)                                                       :: alpha, phi, eta
+    REAL   (KIND=rk)                                                       :: min, intval
+    REAL   (KIND=rk)                       , DIMENSION(3)                  :: n
+    REAL   (KIND=rk)                       , DIMENSION(3,3)                :: aa
+    REAL   (KIND=rk)                       , DIMENSION(6,6)                :: BB, tmp_r6x6
+    REAL   (KIND=rk)                       , DIMENSION(:,:,:), ALLOCATABLE :: crit
+    LOGICAL                                                                :: op=.FALSE.
+    CHARACTER(len=50)                                                      :: opt_str
 
-    allocate(crit(stp_a,stp_p,stp_e))
+    ALLOCATE(crit(stp_a, stp_p, stp_e))
 
-
-    if (present(intervall)) intval = intervall
-    if (present(outp)) op = outp
-     min=10000000_ik        !-- arbitrary initial value
-     !----------------------------------------------------------------------------------------------
-     !-- DEBUG -------------------------------------------------------------------------------------
-     ! write(*,'(A,I5)')"deg_a=", deg_a
-     ! write(*,'(A,I5)')"deg_p=", deg_p
-     ! write(*,'(A,I5)')"deg_e=", deg_e
-     ! write(*,'(A,I5)')"stp_a=", stp_a
-     ! write(*,'(A,I5)')"stp_p=", stp_p
-     ! write(*,'(A,I5)')"stp_e=", stp_e
-     ! write(*,'(A,F5.3)')"intervall=", intervall
-     !-- DEBUG -------------------------------------------------------------------------------------
-     !----------------------------------------------------------------------------------------------
+    IF (PRESENT(intervall)) intval = intervall
+    IF (PRESENT(outp))          op = outp
+    min=10000000_ik        !-- arbitrary initial value
+    !----------------------------------------------------------------------------------------------
+    !-- DEBUG -------------------------------------------------------------------------------------
+    ! write(*,'(A,I5)')"deg_a=", deg_a
+    ! write(*,'(A,I5)')"deg_p=", deg_p
+    ! write(*,'(A,I5)')"deg_e=", deg_e
+    ! write(*,'(A,I5)')"stp_a=", stp_a
+    ! write(*,'(A,I5)')"stp_p=", stp_p
+    ! write(*,'(A,I5)')"stp_e=", stp_e
+    ! write(*,'(A,F5.3)')"intervall=", intervall
+    !-- DEBUG -------------------------------------------------------------------------------------
+    !----------------------------------------------------------------------------------------------
 
     kk_eta = deg_e
-    Do ii_eta_c = 1, stp_e
+    DO ii_eta_c = 1, stp_e
        kk_phi = deg_p
-        Do ii_phi_c = 1, stp_p
-            kk = deg_a
-                Do ii_c = 1, stp_a
-                   call transpose_mat (EE, kk, kk_phi, kk_eta, tmp_r6x6,BB)
-                   if ( mode .eq. 1_ik ) then
-                      call mono_crit (tmp_r6x6,res=crit(ii_c,ii_phi_c,ii_eta_c))
-                   elseif ( mode .eq. 2_ik ) then
-                      call ortho_crit (tmp_r6x6,crit(ii_c,ii_phi_c,ii_eta_c))
-                   end if
-                   if ( min .gt. crit(ii_c,ii_phi_c,ii_eta_c) ) then
-                        min = crit(ii_c,ii_phi_c,ii_eta_c)
-                        kk_s     = kk
-                        kk_phi_s = kk_phi
-                        kk_eta_s = kk_eta
-                   end if
-                   kk = kk + intervall
-            End Do
-            kk_phi = kk_phi + intervall
-        end Do
-        kk_eta = kk_eta + intervall
-     end Do
+       DO ii_phi_c = 1, stp_p
+          kk = deg_a
+          DO ii_c = 1, stp_a
+             CALL transpose_mat (EE, kk, kk_phi, kk_eta, tmp_r6x6,BB)
+             IF ( mode .eq. 1_ik ) THEN
+                CALL mono_crit (tmp_r6x6,res=crit(ii_c,ii_phi_c,ii_eta_c))
+             ELSE IF ( mode .EQ. 2_ik ) THEN
+                CALL ortho_crit (tmp_r6x6,crit(ii_c,ii_phi_c,ii_eta_c))
+             END IF
+             IF ( min .GT. crit(ii_c,ii_phi_c,ii_eta_c) ) THEN
+                min = crit(ii_c,ii_phi_c,ii_eta_c)
+                kk_s     = kk
+                kk_phi_s = kk_phi
+                kk_eta_s = kk_eta
+             END IF
+             kk = kk + intervall
+          END DO
+          kk_phi = kk_phi + intervall
+       END DO
+       kk_eta = kk_eta + intervall
+    END DO
 
-     !-- After minimising the whole field --> recalc the opt_tensor depending on opt angles
-     call transpose_mat (EE, kk_s, kk_phi_s, kk_eta_s, opt_tensor,BB)
+    !-- After minimising the whole field --> recalc the opt_tensor depending on opt angles
+    CALL transpose_mat (EE, kk_s, kk_phi_s, kk_eta_s, opt_tensor,BB)
 
-    if (present(a)) a = kk_s
-    if (present(p)) p = kk_phi_s
-    if (present(e)) e = kk_eta_s
+    IF (PRESENT(a)) a = kk_s
+    IF (PRESENT(p)) p = kk_phi_s
+    IF (PRESENT(e)) e = kk_eta_s
 
-  end subroutine opt_eff_stiff
+  END SUBROUTINE opt_eff_stiff
 
   subroutine opt_eff_stiff_r812 (mode,EE,deg_a,stp_a,deg_p,stp_p,deg_e,stp_e,intervall,opt_tensor,a,p,e,outp)
 
@@ -117,7 +118,7 @@ Implicit None
 
     !----------------------------------------------------------------------------------------------
 
-    real(kind=ik)                                              :: kk,   kk_phi,   kk_eta
+    real(kind=rk)                                              :: kk,   kk_phi,   kk_eta
     real(kind=rk)                                              :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
     integer(kind=ik)                                           :: ii, ii_phi, ii_eta, sw1, sw2
     integer(kind=ik)                                           :: ii_c, ii_phi_c, ii_eta_c
@@ -471,28 +472,28 @@ Implicit None
 end subroutine opt_eff_stiff_r812
 
 
-subroutine etimea (sec)
+SUBROUTINE etimea (sec)
 
-    integer(kind=ik), intent(in)                       :: sec
-    integer(kind=ik)                                   :: mins,    hours,  secs, seconds, mins_s, rest
+    INTEGER(KIND=ik), INTENT(in)                       :: sec
+    INTEGER(KIND=ik)                                   :: mins, hours, secs, seconds, mins_s, remainder
 
-    mins_s=modulo(sec, 3600)
-    seconds=modulo(mins_s, 60)
-    rest=modulo(seconds, 1)
+    mins_s    = MODULO(sec,  3600_ik)
+    seconds   = MODULO(mins_s, 60_ik)
+    remainder = MODULO(seconds, 1_ik)
 
-    hours=(sec-mins_s)/3600
-    mins=(mins_s-seconds)/60
-    secs=(seconds-rest)
+    hours = (sec-mins_s)     / 3600_ik
+    mins  = (mins_s-seconds) / 60_ik
+    secs  = (seconds-remainder)
 
     write(*,'(A,I3,A,I2,A,I2,A)',advance='NO')"ETA: ",&
          hours,":",mins,":",secs,"     hhh:mm:ss"
 
-end subroutine etimea
+END SUBROUTINE etimea
 
 
 subroutine transpose_mat (EE, kk, kk_phi, kk_eta, tmp_r6x6,BB)
 
-    real(kind=ik), intent(in)                                  :: kk,   kk_phi,   kk_eta
+    real(kind=rk), intent(in)                                  :: kk,   kk_phi,   kk_eta
     real(kind=rk), dimension(6,6), intent(in)                  :: EE                     ! Tensor to opimise
     real(kind=rk), dimension(6,6), intent(out)                 :: tmp_r6x6
     real(kind=rk), dimension(6,6), intent(out),optional        :: BB
@@ -533,82 +534,82 @@ subroutine ortho_crit (EE,res)
                 EE( 5 , 6 ) * EE( 5 , 6 ))
 end subroutine ortho_crit
 
-subroutine checksym (TT,sym)
+SUBROUTINE checksym (TT,sym)
 
-  integer(kind=ik)                                   :: i,j
-  real(kind=rk), dimension(6,6), intent(in)          :: TT     ! Tensor
-  real(kind=rk), dimension(6,6), intent(out)         :: sym    ! Tensor
+  INTEGER(kind=ik)                                      :: i,j
+  REAL   (kind=rk), DIMENSION(6,6), INTENT(in)          :: TT     ! Tensor
+  REAL   (kind=rk), DIMENSION(6,6), INTENT(out)         :: sym    ! Tensor
   sym=TT
 
-  sym(1  ,2)=   abs(TT(1,2))-abs(TT(2,1))
-  sym(1:2,3)=(/ abs(TT(1,3))-abs(TT(3,1)), abs(TT(2,3))-abs(TT(3,2))  /)
-  sym(1:3,4)=(/ abs(TT(1,4))-abs(TT(4,1)), abs(TT(2,4))-abs(TT(4,2)), abs(TT(3,4))-abs(TT(4,3))  /)
-  sym(1:4,5)=(/ abs(TT(1,5))-abs(TT(5,1)), abs(TT(2,5))-abs(TT(5,2)), abs(TT(3,5))-abs(TT(5,3)), &
-       & abs(TT(4,5))-abs(TT(5,4))  /)
-  sym(1:5,6)=(/ abs(TT(1,6))-abs(TT(6,1)), abs(TT(2,6))-abs(TT(6,2)), abs(TT(3,6))-abs(TT(6,3)), &
-       & abs(TT(4,6))-abs(TT(6,4)), abs(TT(5,6))-abs(TT(6,5)) /)
+  sym(1  ,2)=   ABS(TT(1,2))-ABS(TT(2,1))
+  sym(1:2,3)=(/ ABS(TT(1,3))-ABS(TT(3,1)), ABS(TT(2,3))-ABS(TT(3,2))  /)
+  sym(1:3,4)=(/ ABS(TT(1,4))-ABS(TT(4,1)), ABS(TT(2,4))-ABS(TT(4,2)), ABS(TT(3,4))-ABS(TT(4,3))  /)
+  sym(1:4,5)=(/ ABS(TT(1,5))-ABS(TT(5,1)), ABS(TT(2,5))-ABS(TT(5,2)), ABS(TT(3,5))-ABS(TT(5,3)), &
+                ABS(TT(4,5))-ABS(TT(5,4))  /)
+  sym(1:5,6)=(/ ABS(TT(1,6))-ABS(TT(6,1)), ABS(TT(2,6))-ABS(TT(6,2)), ABS(TT(3,6))-ABS(TT(6,3)), &
+                ABS(TT(4,6))-ABS(TT(6,4)), ABS(TT(5,6))-ABS(TT(6,5)) /)
 
   !-- Arbitrary threshold!!
   !-- Needs some specifications
-  do i=1,5
-     do j=1,i
-        if ( abs(sym(j,i+1)) .lt. 3._rk) then
+  DO i=1,5
+     DO j=1,i
+        IF ( ABS(sym(j,i+1)) .LT. 3._rk) THEN
            sym(j,i+1) = 0._rk
-        endif
-     end do
-  end do
+        END IF
+     END DO
+  END DO
 ! sym=transpose(sym)
 
-end subroutine checksym
+END SUBROUTINE checksym
 
 
 
-Function DoAO(EE) Result(OUT)
+FUNCTION DoAO(EE) RESULT(OUT)
   !-- Degree of Orthotropic anisotropy
-  Real(kind=rk), Dimension(6,6), intent(in) :: EE
-  Real(kind=rk)                             :: OUT
+  REAL   (kind=rk), DIMENSION(6,6), INTENT(in) :: EE
+  REAL   (kind=rk)                             :: OUT
   !-- Degree of Anisotropy - average 0 divided by average non-zero entry
-  OUT = ((     abs(EE(1,4)) +    abs(EE(1,5)) +    abs(EE(1,6)) &
-          +    abs(EE(2,4)) +    abs(EE(2,5)) +    abs(EE(2,6)) &
-          +    abs(EE(3,4)) +    abs(EE(3,5)) +    abs(EE(3,6)) &
-                            +    abs(EE(4,5)) +    abs(EE(4,6)) &
-                                              +    abs(EE(5,6)) )/12.0_rk ) / &
-        ((     abs(EE(1,1)) +  2*abs(EE(1,2)) +  2*abs(EE(1,3)) &
-                            +    abs(EE(2,2)) +  2*abs(EE(2,3)) &
-                                              +    abs(EE(3,3)) &
-          +    abs(EE(4,4)) +    abs(EE(5,5)) +    abs(EE(6,6)) )/12.0_rk)*100.0_rk
-End Function DoAO
+  OUT = ((     ABS(EE(1,4)) +    ABS(EE(1,5)) +    ABS(EE(1,6)) &
+          +    ABS(EE(2,4)) +    ABS(EE(2,5)) +    ABS(EE(2,6)) &
+          +    ABS(EE(3,4)) +    ABS(EE(3,5)) +    ABS(EE(3,6)) &
+                            +    ABS(EE(4,5)) +    ABS(EE(4,6)) &
+                                              +    ABS(EE(5,6)) )/12.0_rk ) / &
+        ((     ABS(EE(1,1)) +  2*ABS(EE(1,2)) +  2*ABS(EE(1,3)) &
+                            +    ABS(EE(2,2)) +  2*ABS(EE(2,3)) &
+                                              +    ABS(EE(3,3)) &
+          +    ABS(EE(4,4)) +    ABS(EE(5,5)) +    ABS(EE(6,6)) )/12.0_rk)*100.0_rk
+END FUNCTION DoAO
 
-Function DoAM(EE) Result(OUT)
+FUNCTION DoAM(EE) RESULT(OUT)
     !-- Degree of Orthotropic anisotropy
-    Real(kind=rk), Dimension(6,6), intent(in) :: EE
-    Real(kind=rk)                             :: OUT
+    REAL   (kind=rk), DIMENSION(6,6), INTENT(in) :: EE
+    REAL   (kind=rk)                             :: OUT
     !-- Degree of Anisotropy - average 0 divided by average non-zero entry
-    OUT = (( +    abs(EE(1,5)) +    abs(EE(1,6)) &
-             +    abs(EE(2,5)) +    abs(EE(2,6)) &
-             +    abs(EE(3,5)) +    abs(EE(3,6)) &
-             +    abs(EE(4,5)) +    abs(EE(4,6)) )/8.0_rk ) / &
-         ((       abs(EE(1,1)) + 2* abs(EE(1,2)) + 2* abs(EE(1,3)) + 2* abs(EE(1,4)) &
-                               +    abs(EE(2,2)) + 2* abs(EE(2,3)) + 2* abs(EE(2,4)) &
-                                                 +    abs(EE(3,3)) + 2* abs(EE(3,4)) &
-                                                                   +    abs(EE(4,4)) &
-                                                                   +    abs(EE(5,5)) + 2* abs(EE(5,6)) &
-                                                                   +    abs(EE(6,6)))/20.0_rk)*100.0_rk
-End Function DoAM
+    OUT = (( +    ABS(EE(1,5)) +    ABS(EE(1,6)) &
+             +    ABS(EE(2,5)) +    ABS(EE(2,6)) &
+             +    ABS(EE(3,5)) +    ABS(EE(3,6)) &
+             +    ABS(EE(4,5)) +    ABS(EE(4,6)) )/8.0_rk ) / &
+         ((       ABS(EE(1,1)) + 2* ABS(EE(1,2)) + 2* ABS(EE(1,3)) + 2* ABS(EE(1,4)) &
+                               +    ABS(EE(2,2)) + 2* ABS(EE(2,3)) + 2* ABS(EE(2,4)) &
+                                                 +    ABS(EE(3,3)) + 2* ABS(EE(3,4)) &
+                                                                   +    ABS(EE(4,4)) &
+                                                                   +    ABS(EE(5,5)) + 2* ABS(EE(5,6)) &
+                                                                   +    ABS(EE(6,6)))/20.0_rk)*100.0_rk
+END FUNCTION DoAM
 
-subroutine tilt_tensor (TENSOR,T_OUT)
+SUBROUTINE tilt_tensor (TENSOR,T_OUT)
 
   !-- Tilts a tensor by 90° around axis x, y or z - respectively 1, 2 or 3
   !-- other angles are not implemented
   !-- intended to change S11, S22 and S33 to get an S11 .gt. S22 .gt. S33 ordering
 
-  integer(kind=ik)                                   :: axis
-  real(kind=rk), dimension(6,6), intent(in)          :: TENSOR
-  real(kind=rk), dimension(6,6), intent(out)         :: T_OUT
-  real(kind=rk), dimension(6,6)                      :: BB1, BB2, BB3, tmp6x6
-  real(kind=rk), dimension(3)                        :: n1, n2, n3
-  real(kind=rk), dimension(3,3)                      :: aa1, aa2, aa3
-  real(kind=rk), parameter                           :: alpha = 1.570796326794897 ! 90°*pi/180
+  INTEGER(kind=ik)                                      :: axis
+  REAL   (kind=rk), DIMENSION(6,6), INTENT(in)          :: TENSOR
+  REAL   (kind=rk), DIMENSION(6,6), INTENT(out)         :: T_OUT
+  REAL   (kind=rk), DIMENSION(6,6)                      :: BB1, BB2, BB3, tmp6x6
+  REAL   (kind=rk), DIMENSION(3)                        :: n1, n2, n3
+  REAL   (kind=rk), DIMENSION(3,3)                      :: aa1, aa2, aa3
+  REAL   (kind=rk), PARAMETER                           :: alpha = 1.570796326794897 ! 90°*pi/180
 
   n1 = [1,0,0]
   n2 = [0,1,0]
@@ -616,42 +617,40 @@ subroutine tilt_tensor (TENSOR,T_OUT)
   aa1 = rot_alg(n1,alpha)
   aa2 = rot_alg(n2,alpha)
   aa3 = rot_alg(n3,alpha)
-  BB1 = tra_R6(aa1)
-  BB2 = tra_R6(aa2)
-  BB3 = tra_R6(aa3)
+  BB1 = tra_R6 (aa1)
+  BB2 = tra_R6 (aa2)
+  BB3 = tra_R6 (aa3)
 
-  If ( (TENSOR(1,1) .gt. TENSOR(2,2)) .AND.  &
-  (TENSOR(1,1) .gt. TENSOR(3,3)) .AND.  (TENSOR(2,2) .gt. TENSOR(3,3)) ) then
+  IF ( (TENSOR(1,1) .GT. TENSOR(2,2)) .AND.  &
+  (TENSOR(1,1) .GT. TENSOR(3,3)) .AND.  (TENSOR(2,2) .GT. TENSOR(3,3)) ) THEN
           !-- 123
           T_OUT = TENSOR
-  Else If ( (TENSOR(1,1) .gt. TENSOR(2,2)) .AND.  &
-  (TENSOR(1,1) .gt. TENSOR(3,3)) .AND.  (TENSOR(2,2) .lt. TENSOR(3,3)) ) then
+  Else IF ( (TENSOR(1,1) .GT. TENSOR(2,2)) .AND.  &
+  (TENSOR(1,1) .GT. TENSOR(3,3)) .AND.  (TENSOR(2,2) .LT. TENSOR(3,3)) ) THEN
           !-- 132 => 123
-          T_OUT  = matmul(matmul(transpose(BB1),TENSOR),BB1)
-  Else If ( (TENSOR(1,1) .lt. TENSOR(2,2)) .AND.  &
-  (TENSOR(1,1) .lt. TENSOR(3,3)) .AND.  (TENSOR(2,2) .gt. TENSOR(3,3)) ) then
+          T_OUT  = MATMUL(MATMUL(TRANSPOSE(BB1),TENSOR),BB1)
+  Else IF ( (TENSOR(1,1) .LT. TENSOR(2,2)) .AND.  &
+  (TENSOR(1,1) .LT. TENSOR(3,3)) .AND.  (TENSOR(2,2) .GT. TENSOR(3,3)) ) THEN
           !-- 231 => 132
-          tmp6x6 = matmul(matmul(transpose(BB3),TENSOR),BB3)
+          tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB3),TENSOR),BB3)
           !-- 132 => 123
-          T_OUT  = matmul(matmul(transpose(BB1),tmp6x6),BB1)
-  Else If ( (TENSOR(1,1) .lt. TENSOR(2,2)) .AND.  &
-  (TENSOR(1,1) .gt. TENSOR(3,3)) .AND.  (TENSOR(2,2) .gt. TENSOR(3,3)) ) then
+          T_OUT  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1)
+  Else IF ( (TENSOR(1,1) .LT. TENSOR(2,2)) .AND.  &
+  (TENSOR(1,1) .GT. TENSOR(3,3)) .AND.  (TENSOR(2,2) .GT. TENSOR(3,3)) ) THEN
           !-- 213 => 123
-          T_OUT  = matmul(matmul(transpose(BB3),TENSOR),BB3)
-  Else If ( (TENSOR(1,1) .gt. TENSOR(2,2)) .AND.  &
-  (TENSOR(1,1) .lt. TENSOR(3,3)) .AND.  (TENSOR(2,2) .lt. TENSOR(3,3)) ) then
+          T_OUT  = MATMUL(MATMUL(TRANSPOSE(BB3),TENSOR),BB3)
+  Else IF ( (TENSOR(1,1) .GT. TENSOR(2,2)) .AND.  &
+  (TENSOR(1,1) .LT. TENSOR(3,3)) .AND.  (TENSOR(2,2) .LT. TENSOR(3,3)) ) THEN
           !-- 312 => 132
-          tmp6x6 = matmul(matmul(transpose(BB2),TENSOR),BB2)
+          tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB2),TENSOR),BB2)
           !-- 132 => 123
-          T_OUT  = matmul(matmul(transpose(BB1),tmp6x6),BB1)
-  Else If ( (TENSOR(1,1) .lt. TENSOR(2,2)) .AND.  &
-  (TENSOR(1,1) .lt. TENSOR(3,3)) .AND.  (TENSOR(2,2) .lt. TENSOR(3,3)) ) then
+          T_OUT  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1)
+  Else IF ( (TENSOR(1,1) .LT. TENSOR(2,2)) .AND.  &
+  (TENSOR(1,1) .LT. TENSOR(3,3)) .AND.  (TENSOR(2,2) .LT. TENSOR(3,3)) ) THEN
           !-- 321 => 123
-          T_OUT  = matmul(matmul(transpose(BB2),TENSOR),BB2)
-  End If
+          T_OUT  = MATMUL(MATMUL(TRANSPOSE(BB2),TENSOR),BB2)
+  END IF
 
-end subroutine tilt_tensor
+END SUBROUTINE tilt_tensor
 
-
-
-end module opt_stiffness
+END MODULE opt_stiffness
