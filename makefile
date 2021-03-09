@@ -57,7 +57,7 @@ endif
 # endif
 # --------------------------------------------------------------------------------------------------
 # Executable
-MAIN_bin = $(bin_dir)tensor_optimizer_$(trgt_arch)$(bin_suf)
+MAIN_bin = $(bin_dir)tensor_optimizer$(bin_suf)
 # --------------------------------------------------------------------------------------------------
 # Generate objects
 #

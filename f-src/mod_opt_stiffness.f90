@@ -39,16 +39,11 @@ CONTAINS
 
     REAL   (KIND=rk)                                                       :: kk,   kk_phi,   kk_eta
     REAL   (KIND=rk)                                                       :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
-    INTEGER(KIND=ik)                                                       :: ii, ii_phi, ii_eta, sw1, sw2
     INTEGER(KIND=ik)                                                       :: ii_c, ii_phi_c, ii_eta_c
-    REAL   (KIND=rk)                                                       :: alpha, phi, eta
     REAL   (KIND=rk)                                                       :: min, intval
-    REAL   (KIND=rk)                       , DIMENSION(3)                  :: n
-    REAL   (KIND=rk)                       , DIMENSION(3,3)                :: aa
     REAL   (KIND=rk)                       , DIMENSION(6,6)                :: BB, tmp_r6x6
     REAL   (KIND=rk)                       , DIMENSION(:,:,:), ALLOCATABLE :: crit
     LOGICAL                                                                :: op=.FALSE.
-    CHARACTER(len=50)                                                      :: opt_str
 
     ALLOCATE(crit(stp_a, stp_p, stp_e))
 
@@ -109,8 +104,8 @@ CONTAINS
 
     integer(kind=ik), intent(in)                               :: mode                   ! Switch between mono=1 and orth=2
     real(kind=rk), dimension(6,6), intent(in)                  :: EE                     ! Tensor to opimise
-    integer(kind=rk), intent(in)                               :: deg_a, deg_e, deg_p    ! orientation to start with
-    integer(kind=rk), intent(in)                               :: stp_a, stp_e, stp_p    ! Amount of steps to increase
+    integer(kind=ik), intent(in)                               :: deg_a, deg_e, deg_p    ! orientation to start with
+    integer(kind=ik), intent(in)                               :: stp_a, stp_e, stp_p    ! Amount of steps to increase
     real(kind=rk), intent(in), optional                        :: intervall              ! stepwidth
     real(kind=rk), dimension(6,6), intent(out), optional       :: opt_tensor             ! optimised tensor - should be a mandatory one
     real(kind=rk), intent(out), optional                       :: a,p,e                  ! resulting angles
@@ -120,9 +115,7 @@ CONTAINS
 
     real(kind=rk)                                              :: kk,   kk_phi,   kk_eta
     real(kind=rk)                                              :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
-    integer(kind=ik)                                           :: ii, ii_phi, ii_eta, sw1, sw2
     integer(kind=ik)                                           :: ii_c, ii_phi_c, ii_eta_c
-    real(kind=rk)                                              :: alpha, phi, eta
     real(kind=rk)                                              :: min, intval
     real(kind=rk), dimension(3)                                :: n
     real(kind=rk), dimension(3,3)                              :: aa
