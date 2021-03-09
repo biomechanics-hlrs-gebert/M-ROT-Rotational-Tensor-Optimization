@@ -28,8 +28,8 @@ CONTAINS
 
     INTEGER(KIND=ik), INTENT(in)                                           :: mode                        ! mono=1 and orth=2
     REAL   (KIND=rk), INTENT(in)           , DIMENSION(6,6)                :: EE                          ! Tensor to opimise
-    INTEGER(KIND=rk), INTENT(in)                                           :: deg_a, deg_e, deg_p         ! orientation to start with
-    INTEGER(KIND=rk), INTENT(in)                                           :: stp_a, stp_e, stp_p         ! Amount of steps to increase
+    INTEGER(KIND=ik), INTENT(in)                                           :: deg_a, deg_e, deg_p         ! orientation to start with
+    INTEGER(KIND=ik), INTENT(in)                                           :: stp_a, stp_e, stp_p         ! Amount of steps to increase
     REAL   (KIND=rk), INTENT(in) , OPTIONAL                                :: intervall                   ! stepwidth
     REAL   (KIND=rk), INTENT(out), OPTIONAL, DIMENSION(6,6)                :: opt_tensor                  ! optimised tensor
     REAL   (KIND=rk), INTENT(out), OPTIONAL                                :: a,p,e                       ! resulting angles

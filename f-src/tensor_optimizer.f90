@@ -83,7 +83,7 @@ IMPLICIT NONE
   !-- Initialisierung zum öffnen der Datei zum einlesen des Headers
   INTEGER     (KIND=ik), PARAMETER                           :: header_row_header=1
 
-  !-- Objekte und Variablen zur internen Verwaltung der Daten
+  !-- Objekte und Variablen zur internen Verwaltung der Daten:
 ! TYPE(csv_file)                                             :: input, input_header, output_CR0, output_CR1, output_CR2
 ! CHARACTER   (LEN=1)  , PARAMETER                           :: quote=' ', delimiter=','
 ! LOGICAL     (KIND=rk)                                      :: status_ok
@@ -91,12 +91,16 @@ IMPLICIT NONE
   REAL        (KIND=rk)                                      :: val                                  !! the value to add
   REAL        (KIND=rk), DIMENSION(36)                       :: buffer_vector
 
-  CHARACTER   (LEN=200)                                      :: input_file
-  TYPE(csv_string)     , DIMENSION(:) , allocatable          :: header
+  CHARACTER   (LEN=200)                                      :: input_file, header
+  CHARACTER   (LEN=500)                                      :: cr_str_clpbd, line, CR_str
+  CHARACTER   (LEN=20)                                       :: string
   INTEGER     (KIND=ik), PARAMETER                           :: n_cols=38, header_row=1
   INTEGER     (KIND=4)                                       :: lines, lunit=10, how_many_lines=10
   CHARACTER   (LEN=10)                                       :: hw_mny_lns
   INTEGER     (KIND=ik), DIMENSION(4)                        :: un
+  INTEGER  (KIND=ik)                                         :: ios, ntokens
+  CHARACTER(len=mcl)                                         :: tokens(100)
+  CHARACTER(len=mcl)   , DIMENSION(3)                        :: token
 
   !-- Variablen zur Ausgabe der Daten
   TYPE :: csv_data
@@ -128,6 +132,7 @@ IMPLICIT NONE
   !-- additional transformational variables... double spending because it's implemented within mod_opt_stiffness.f90
   CHARACTER   (LEN=3)                                        :: calculat
   INTEGER     (KIND=ik)                                      :: calcfail=0
+  LOGICAL                                                    :: rprt_mat, rprt
 
 !----------------------------------------------------------------------------------------------
 !-- DEFAULTS ----- rprt=.TRUE. ----- rprt_mat=.FALSE. -----------------------------------------
@@ -174,7 +179,7 @@ READ (un(1), '(A)') header
 
 DO ii =2, 4
    OPEN( UNIT=un(ii), FILE=TRIM(flnm(ii)), STATUS='NEW' )      ! Open all output files
-   WRITE(un(ii), '(A)') header
+   WRITE(un(ii), '(A)') TRIM(header)
 END DO
 
 WRITE(1_ik ,'(A)') "csv header added"
@@ -188,8 +193,8 @@ WRITE(1_ik ,'(A)') "csv header added"
 DO kk=2 , lines
    READ (un(1), '(A)') line
    CALL parse(str=line, delims=",", args=tokens, nargs=ntokens)
-   CALL value_dr(tokens(1), vali, ios=ios)
-   IF ( tokens(1)+1_ik .GT. lines ) THEN
+   CALL value_di(tokens(1), vali, ios=ios)
+   IF ( vali+1_ik .GT. lines ) THEN
       WRITE(1_ik ,'(A)')
       WRITE(1_ik ,'(A)') "Program aborted because the line count is less than Domains are numbered."
       WRITE(1_ik ,'(A)') "Either the file or simulation is corrupted or it was cleaned with another program before."
@@ -317,8 +322,8 @@ DO ii_lines = 1, how_many_lines
          CALL write_matrix(t2nd(1, ii_lines)%Smat,1_ik,"smat","")
       endif
 
-      CALL opt_eff_stiff(1_ik, t2nd(1,ii_lines)%Smat,deg_a=-91_ik,stp_a=182_ik,deg_p=-91_ik,&
-           &stp_p=182_ik,deg_e=-91_ik,stp_e=182_ik,intervall=1._rk,opt_tensor=mono_opt, a=a,p=p,e=e,outp=rprt)
+      CALL opt_eff_stiff(1_ik, t2nd(1,ii_lines)%Smat, deg_a=-91_ik, stp_a=182_ik, deg_p=-91_ik, &
+           stp_p=182_ik, deg_e=-91_ik, stp_e=182_ik, intervall=1._rk, opt_tensor=mono_opt, a=a, p=p, e=e, outp=rprt)
       am1=a     ! variables stored for use in user output
       pm1=p
       em1=e
@@ -419,8 +424,8 @@ DO ii_lines = 1, how_many_lines
    Avg_DoA_InM  = Sum_DoA_InM  / REAL(ii_lines, rk)
    Avg_DoA_Mono = Sum_DoA_Mono / REAL(ii_lines, rk)
    !-- Degree of Anisotropy - average 0 divided by average non-zero entry
-   t2nd_CR0(2, ii_lines)%DoA = DoAO(t2nd(1, ii_lines)%Smat)
-   t2nd_CR2(4, ii_lines)%DoA = DoAO(orth_opt)
+   t2nd(2, ii_lines)%DoA = DoAO(t2nd(1, ii_lines)%Smat)
+   t2nd(4, ii_lines)%DoA = DoAO(orth_opt)
    Sum_DoA_InO  = Sum_DoA_InO  + t2nd(2, ii_lines)%DoA
    Sum_DoA_Orth = Sum_DoA_Orth + t2nd(4, ii_lines)%DoA
    Avg_DoA_InO  = Sum_DoA_InO  / REAL(ii_lines, rk)                            ! Valid, because zeromatrices are considererd empty volume - therefore part of average
@@ -448,29 +453,32 @@ DO ii_lines = 1, how_many_lines
    t2nd(4, ii_lines)%Smat = orth_sym                                  !-- Assignment criteria 2 - orthotropic
    last_ii_lns_rlvnt=ii_lines
 ELSE
-   t2nd(2:4, ii_lines)%Smat      = M_Null                         !-- Assignment criteria 0
-   t2nd(2:4, ii_lines)%DoA       = 0.0_rk                         !-- Assignment criteria 0
-   t2nd(2:4, ii_lines)%optimised = 0_ik                           !-- Assignment criteria 0
+   DO ii=2, 4
+   t2nd(ii, ii_lines)%Smat      = M_Null                         !-- Assignment criteria 0
+   t2nd(ii, ii_lines)%DoA       = 0.0_rk                         !-- Assignment criteria 0
+   t2nd(ii, ii_lines)%optimised = 0_ik                           !-- Assignment criteria 0
+   END DO
    zero_matrix_counter = zero_matrix_counter+1
 END IF
 END DO
 
 ! ----------------------------------------------------------------------------------------------
- ! -- copy optimised tensors to files
- DO ii = 1, how_many_lines
+! -- copy optimised tensors to files
+DO ii = 1, how_many_lines
     IF ( t2nd(1, ii)%thres_low .EQV. .FALSE. .and. t2nd(1, ii)%thres_high .EQV. .FALSE. ) THEN
        IF ( t2nd(3, ii)%del .EQV. .FALSE. .AND. t2nd(4, ii)%del .EQV. .FALSE. ) THEN
           DO jj=2, 4
-          CR_str(jj) = ""
-          CALL writeq_dr(t2nd(jj, ii)%dn , CR_str_clpbd, '(A)')
-          CALL insertstr(CR_str(jj), TRIM(CR_str_clpbd)//", ", LEN_TRIM(CR_str(jj))+1_ik)
+
+          CR_str = " "
+          Write( string, '(f10.2)' ) t2nd(jj, ii)%dn
+          CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
           DO mm=1, 6
              DO nn=1, 6             ! Acts like a header sorting algorithm
-                CALL writeq_dr(t2nd(jj, ii)%Smat(nn,mm), CR_str_clpbd, '(A)')
-                CALL insertstr(CR_str(jj), TRIM(CR_str_clpbd)//", ", LEN_TRIM(CR_str(jj))+1_ik)
+                Write( string, '(f10.2)' ) t2nd(jj, ii)%Smat(nn,mm)
+                CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
              END DO
           END DO
-          WRITE (un(jj), '(A)') TRIM(CR_str(jj))
+          WRITE (un(jj), '(A)') TRIM(CR_str)
           END DO
        END IF
     END IF
