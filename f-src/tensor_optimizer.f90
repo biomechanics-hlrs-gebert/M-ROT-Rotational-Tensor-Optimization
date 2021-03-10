@@ -8,7 +8,7 @@
 !-- \author:                Johannes Gebert        (HLRS, NUM)
 !--
 !-- \date 27.10.2020
-!-- \mpodified 06.03.2021
+!-- \modified 09.03.2021
 !--
 !-- The program is the result of a couple of investigations in optimising, sorting and
 !-- rotating R6x6 2nd order stiffness tensors.
@@ -82,7 +82,7 @@ IMPLICIT NONE
   INTEGER     (KIND=ik), PARAMETER                           :: header_row_header=1
   CHARACTER   (LEN=200)                                      :: input_file, header
   CHARACTER   (LEN=500)                                      :: line, CR_str
-  CHARACTER   (LEN=20)                                       :: string
+  CHARACTER   (LEN=12)                                       :: string
   INTEGER     (KIND=ik), PARAMETER                           :: n_cols=38, header_row=1
   INTEGER     (KIND=4)                                       :: lines, lunit=10, how_many_lines=10
   CHARACTER   (LEN=10)                                       :: hw_mny_lns
@@ -130,7 +130,7 @@ CALL GET_COMMAND_ARGUMENT(2, hw_mny_lns)
 READ(hw_mny_lns,"(I10)") how_many_lines
 
 !-- Abstand in cli
-WRITE(1_ik, '(A)')
+WRITE(*, '(A)')
 
 !-- read lines
 lines = 0
@@ -166,14 +166,7 @@ DO ii =2, 4
    WRITE(un(ii), '(A)') TRIM(header)
 END DO
 
-WRITE(1_ik ,'(A)') "csv header added"
-
-!----------------------------------------------------------------------------------------------
-!-- Read the raw data
-!-- Sort the raw data (via array index)
-!-- Threshholding on raw data
-!--
-
+!-- Read the raw data; Sort the raw data (via array index); Thresholding on raw data
 DO kk=2 , lines
    READ (un(1), '(A)') line
 
@@ -181,16 +174,17 @@ DO kk=2 , lines
    CALL value_di(tokens(1), vali, ios=ios)
 
    vali = vali+1_ik        !-- vali+1_ik; otherwise index=0 due to dmnnr=0
+   t2nd(:, vali)%dn = vali-1_ik
 
    IF ( vali .GT. lines ) THEN
-      WRITE(1_ik ,'(A)')
-      WRITE(1_ik ,'(A)') "Program aborted because the line count is less than Domains are numbered."
-      WRITE(1_ik ,'(A)') "Either the file or simulation is corrupted or it was cleaned with another program before."
-      WRITE(1_ik ,'(A)') "This program features a complete tensor processing for a struct-process chain."
-      WRITE(1_ik ,'(A)')
+      WRITE(*,'(A)')
+      WRITE(*,'(A)') "Program aborted because the line count is less than Domains are numbered."
+      WRITE(*,'(A)') "Either the file or simulation is corrupted or it was cleaned with another program before."
+      WRITE(*,'(A)') "This program features a complete tensor processing for a struct-process chain."
+      WRITE(*,'(A)')
       GOTO 9999            !-- jump to  end program - other ways to do that?
    END IF
-   oo=1_ik
+   oo=2_ik                 !-- oo mind. 2! 1 = Domain number
    DO mm=1,6
       DO nn=1,6
          IF (LEN_TRIM(tokens(oo)) > 0_ik ) CALL value_dr(tokens(oo), t2nd(1, vali)%Smat(nn,mm), ios=ios)
@@ -220,7 +214,7 @@ END IF
 zero_matrix_counter=0
 
 !-- Beginn processing of each individual domain specific tensor
-WRITE(1_ik, '(A)')
+WRITE(*, '(A)')
 
 
 write(*,*) "How many lines: ", how_many_lines
@@ -231,7 +225,7 @@ write(*,*) "         lines: ",          lines
 !last_ii_lns_rlvnt=50
 DO ii_lines = 1, lines
    IF ( t2nd(1, ii_lines)%thres_low .EQV. .TRUE. .AND. t2nd(1, ii_lines)%thres_high .EQV. .TRUE. ) THEN
-      CALL EXECUTE_COMMAND_LINE('printf "\033c"',CMDSTAT=stat)
+      CALL EXECUTE_COMMAND_LINE('printf "\033c"',CMDSTAT=stat)      !-- Clears the command line
       !-- User information
       WRITE(*,"(A)")
       WRITE(*,"(2A)") " Input file: ", input_file
@@ -275,34 +269,27 @@ DO ii_lines = 1, lines
 
          DO ii=3, 4
             WRITE(*,"(A)") "----------------------------------------------------------------"
-            IF (ii == 3) WRITE(1_ik, "(A)") " Previous Tensor optimised monotropic:"
-            IF (ii == 4) WRITE(1_ik, "(A)") " Previous Tensor optimised orthotropic:"
+            IF (ii == 3) WRITE(*, "(A)") " Previous Tensor optimized monotropic:"
+            IF (ii == 4) WRITE(*, "(A)") " Previous Tensor optimized orthotropic:"
             DO zz=1,6
                WRITE(*,"(A,6F10.3,A)")"[", t2nd(ii, last_ii_lns_rlvnt)%Smat(:,zz) ,"  ]"
             END DO
             IF (t2nd(ii, last_ii_lns_rlvnt)%optimised .EQ. 1_ik ) THEN
-               WRITE(*,"(A)") " Tensor optimised:     YES"
+               WRITE(*,"(A)") " Tensor optimized:     YES"
             ELSE
-               WRITE(*,"(A)") " Tensor optimised:     NO"
+               WRITE(*,"(A)") " Tensor optimized:     NO"
             END IF
          END DO
 
-         WRITE(1_ik, "(A)")  "----------------------------------------------------------------"
-         WRITE(1_ik, "(3A,I6)") " Calculat orth =  ", Calculat, "       Amount of non-123: ", calcfail
+         WRITE(*, "(A)")  "----------------------------------------------------------------"
+         WRITE(*, "(3A,I6)") " Calculat orth =  ", Calculat, "       Amount of non-123: ", calcfail
       END IF
 
       CALL CPU_TIME(start)
 
-      !----------------------------------------------------------------------------------------------
-      !-- DEBUG -------------------------------------------------------------------------------------
-      ! t2nd(ii_lines) = Matrix_Iso(5600._rk,0.3_rk)
-      ! CALL inverse(EE, 6_ik,6)
-      !-- DEBUG -------------------------------------------------------------------------------------
-      !----------------------------------------------------------------------------------------------
-
       !-- Calculate optimisation
       IF ( rprt_mat .EQV. .TRUE. ) THEN
-         WRITE(1_ik, '(A)')"Monotropic  - 1st stage"
+         WRITE(*, '(A)')"Monotropic  - 1st stage"
          CALL write_matrix(t2nd(1, ii_lines)%Smat,1_ik,"smat","")
       endif
 
@@ -314,7 +301,7 @@ DO ii_lines = 1, lines
 
       IF ( rprt_mat .EQV. .TRUE. ) THEN
          CALL write_matrix(mono_opt,1_ik,"Monotropic optimised stage 1","")
-         WRITE(1_ik, '(A)')"Monotropic  - 2nd stage"
+         WRITE(*, '(A)')"Monotropic  - 2nd stage"
       END IF
 
       !-- tune optimization, there can be a shitload of steps requested!!
@@ -348,7 +335,7 @@ DO ii_lines = 1, lines
       eo1=e
       IF ( rprt_mat .EQV. .TRUE. ) THEN
          CALL write_matrix(orth_opt, 1_ik, "Orthotropic optimised stage 1", "")
-         WRITE(1_ik, '(A)') "Orthotropic - 1st stage"
+         WRITE(*, '(A)') "Orthotropic - 1st stage"
       END IF
 
       !-- Tilting ------------------------------------------------------------------------------
@@ -373,7 +360,7 @@ DO ii_lines = 1, lines
    IF ( DoAO(t2nd(1, ii_lines)%Smat) .GT. DoAO(orth_opt)  ) THEN
       t2nd(4, ii_lines)%optimised=1_ik
    END IF
-   
+
    !-- Degree of Anisotropy - average 0 divided by average non-zero entry     ! All values are calculated again, because there 
    t2nd(1, ii_lines)%DoA = DoAM(t2nd(1, ii_lines)%Smat)                 ! Special Case!! Ortho DoA saved in file, Mono DoA within runtime variable only!!
    t2nd(3, ii_lines)%DoA = DoAM(mono_opt)                                ! Special Case!! Ortho DoA saved in file, Mono DoA within runtime variable only!!
@@ -410,20 +397,25 @@ END DO
 ! ----------------------------------------------------------------------------------------------
 ! -- copy optimised tensors to files
 DO ii = 1, how_many_lines
-   IF ( t2nd(1, ii)%thres_low .EQV. .TRUE. .and. t2nd(1, ii)%thres_high .EQV. .TRUE. ) THEN
-      IF ( t2nd(3, ii)%del .EQV. .FALSE. .AND. t2nd(4, ii)%del .EQV. .FALSE. ) THEN
-         DO jj=2, 4
-            CR_str = " "
-            Write( string, '(f10.2)' ) t2nd(jj, ii)%dn
-            CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
-            DO mm=1, 6
-               DO nn=1, 6             ! Acts like a header sorting algorithm
-                  Write( string, '(f10.2)' ) t2nd(jj, ii)%Smat(nn,mm)
+   IF ( t2nd(1, ii)%thres_low      .EQV.  .TRUE. ) THEN
+      IF (  t2nd(1, ii)%thres_high .EQV.  .TRUE. ) THEN
+         IF ( t2nd(3, ii)%del      .EQV. .FALSE. ) THEN
+            IF ( t2nd(4, ii)%del   .EQV. .FALSE. ) THEN
+               write(*,*) "Yes."
+               DO jj=2, 4
+                  CR_str = " "
+                  write( string, '(F12.3)' ) t2nd(1, ii)%dn
                   CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
+                  DO mm=1, 6
+                     DO nn=1, 6             ! Acts like a header sorting algorithm
+                        write( string, '(F12.3)' ) t2nd(jj, ii)%Smat(nn,mm)
+                        CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
+                     END DO
+                  END DO
+                  WRITE (un(jj), '(A)') TRIM(CR_str)
                END DO
-            END DO
-            WRITE (un(jj), '(A)') TRIM(CR_str)
-         END DO
+            END IF
+         END IF
       END IF
    END IF
 END DO
@@ -432,14 +424,14 @@ ii=lines
 !----------------------------------------------------------------------------------------------
 !-- Print final output
 !--
-WRITE(1_ik, '(A)')
-WRITE(1_ik, '(A)'   , advance='NO' ) " Program finished."
-WRITE(1_ik, '(I5,A)', advance='YES') zero_matrix_counter," lines contained thresholded tensors."
-WRITE(1_ik, '(A)')
-WRITE(1_ik, "(A)")  "----------------------------------------------------------------"
+WRITE(*, '(A)')
+WRITE(*, '(A)'   , advance='NO' ) " Program finished."
+WRITE(*, '(I5,A)', advance='YES') zero_matrix_counter," lines contained thresholded tensors."
+WRITE(*, '(A)')
+WRITE(*, "(A)")  "----------------------------------------------------------------"
 
 !-- lots of potential to simplify
-9999 continue
+9999 CONTINUE
 
-End program tensor_optimizer
+END PROGRAM tensor_optimizer
 

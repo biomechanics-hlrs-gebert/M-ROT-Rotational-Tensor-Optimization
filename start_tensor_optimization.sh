@@ -4,13 +4,20 @@
 #
 # Author:          Johannes Gebert <gebert@hlrs.de>
 # Created:         06.03.2021
-# Last edit:       09.03.2021
+# Last edit:       10.03.2021
 # ------------------------------------------------------------------------------
 # Check whether all requirements are met
 # File checking done in bash. It's more natural doing it this way. Furthermore, it is not a part of the toolchain itself
 # ------------------------------------------------------------------------------
 
 stop=0
+
+re='^[0-9]+$'
+if [[ $2 =~ $re ]]; then
+	amnt_lines=$2
+else
+	echo "No amount of lines given or second argument was not an integer."
+fi
 
 if [ ! -z $1 ]; then
 	filename_in=$(basename -s ".csv" $1)
@@ -34,5 +41,5 @@ if [ ! -z $1 ]; then
   fi
 else
 	echo "Input file missing."
-	echo "Usage: ./<this script> <input file>"
+	echo "Usage: ./<this script> <input file> <amount of lines (optional)>"
 fi
