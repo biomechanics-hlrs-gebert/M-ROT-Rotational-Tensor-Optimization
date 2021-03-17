@@ -38,15 +38,11 @@
 !--       This will give a plausible sorting AND a measure for stiffness trajectories
 !--
 !----------------------------------------------------------------------------------------------
-!-- Requires a header as follows:
-!-- Domain No,S11,S12,S13,S14,S15,S16,S21,S22,S23,S24,S25,S26,S31,S32,S33,S34,S35,S36, ...
-!-- ... S41,S42,S43,S44,S45,S46,S51,S52,S53,S54,S55,S56,S61,S62,S63,S64,S65,S66,
-!--
 !-- Entries with less then 0.1% of the true stiffness are designated as remainder
 !-- Entries with more then 100% of the true stiffness are designated as remainder
 !-- The tensors are rotated during the optimisation to get the following criteria:
 !-- S11 > S22 > S33
-!-- It works with a hardcoded Young-Modulus (E/EY)
+!-- It works with a hardcoded, parametrized Young-Modulus (E/EY)
 !--
 !-- Keeps the original file with has to be given as command argument
 !-- CR0 - sym checked tensors
@@ -81,7 +77,7 @@ IMPLICIT NONE
   REAL        (KIND=rk), DIMENSION(6,6)                      :: mono_opt, orth_opt, mono_sym, orth_sym, M_Null
   INTEGER     (KIND=ik), PARAMETER                           :: header_row_header=1
   CHARACTER   (LEN=200)                                      :: input_file, header
-  CHARACTER   (LEN=500)                                      :: line, CR_str
+  CHARACTER   (LEN=1000)                                     :: line, CR_str
   CHARACTER   (LEN=12)                                       :: string
   INTEGER     (KIND=ik), PARAMETER                           :: n_cols=38, header_row=1
   INTEGER     (KIND=4)                                       :: lines, lunit=10, how_many_lines=10
@@ -93,6 +89,7 @@ IMPLICIT NONE
   TYPE :: csv_data
       REAL    (KIND=rk)                                      :: dn, thres, Doa        ! REAL damit write bei csv geht!!
       REAL    (KIND=rk), DIMENSION(6,6)                      :: Smat
+      REAL    (KIND=rk), DIMENSION(3)                        :: euclid_ang=(/ 0._rk, 0._rk, 0._rk /)
       INTEGER (KIND=ik)                                      :: zrmtx=0, optimised=0
       LOGICAL (KIND=rk)                                      :: thres_high=.TRUE., thres_low=.TRUE., del=.FALSE.   ! initialisation
   END TYPE csv_data
@@ -118,12 +115,10 @@ IMPLICIT NONE
   INTEGER     (KIND=ik)                                      :: calcfail=0
   LOGICAL                                                    :: rprt_mat, rprt
 
-!----------------------------------------------------------------------------------------------
 !-- DEFAULTS ----- rprt=.TRUE. ----- rprt_mat=.FALSE. -----------------------------------------
 rprt=.TRUE.
 rprt_mat=.FALSE.
 !-- DEFAULTS ----------------------------------------------------------------------------------
-!----------------------------------------------------------------------------------------------
 
 CALL GET_COMMAND_ARGUMENT(1, input_file)
 CALL GET_COMMAND_ARGUMENT(2, hw_mny_lns)
@@ -156,15 +151,9 @@ un(2) = 30_ik            ! out CR0
 un(3) = 31_ik            ! out CR1
 un(4) = 32_ik            ! out CR2
 
-!----------------------------------------------------------------------------------------------
 !-- Initialize and open  the csv-files to write optimized data
 OPEN( UNIT=un(1), FILE=TRIM(input_file ), STATUS='OLD' )
 READ (un(1), '(A)') header
-
-DO ii =2, 4
-   OPEN( UNIT=un(ii), FILE=TRIM(flnm(ii)), STATUS='NEW' )      ! Open all output files
-   WRITE(un(ii), '(A)') TRIM(header)
-END DO
 
 !-- Read the raw data; Sort the raw data (via array index); Thresholding on raw data
 DO kk=2 , lines
@@ -215,12 +204,6 @@ zero_matrix_counter=0
 
 !-- Beginn processing of each individual domain specific tensor
 WRITE(*, '(A)')
-
-
-write(*,*) "How many lines: ", how_many_lines
-write(*,*) "         lines: ",          lines
-
-
 
 !last_ii_lns_rlvnt=50
 DO ii_lines = 1, lines
@@ -282,7 +265,7 @@ DO ii_lines = 1, lines
          END DO
 
          WRITE(*, "(A)")  "----------------------------------------------------------------"
-         WRITE(*, "(3A,I6)") " Calculat orth =  ", Calculat, "       Amount of non-123: ", calcfail
+!        WRITE(*, "(3A,I6)") " Calculat orth =  ", Calculat, "       Amount of non-123: ", calcfail
       END IF
 
       CALL CPU_TIME(start)
@@ -291,7 +274,7 @@ DO ii_lines = 1, lines
       IF ( rprt_mat .EQV. .TRUE. ) THEN
          WRITE(*, '(A)')"Monotropic  - 1st stage"
          CALL write_matrix(t2nd(1, ii_lines)%Smat,1_ik,"smat","")
-      endif
+      END IF
 
       CALL opt_eff_stiff(1_ik, t2nd(1,ii_lines)%Smat, deg_a=-91_ik, stp_a=182_ik, deg_p=-91_ik, &
            stp_p=182_ik, deg_e=-91_ik, stp_e=182_ik, intervall=1._rk, opt_tensor=mono_opt, a=a, p=p, e=e, outp=rprt)
@@ -311,14 +294,14 @@ DO ii_lines = 1, lines
       am2=a
       pm2=p
       em2=e
+
+      t2nd(3, ii_lines)%euclid_ang = (/ a, p, e /)
+
       IF ( rprt_mat .EQV. .TRUE. ) THEN
          CALL write_matrix(mono_opt, 1_ik, "Monotrop optimised stage 2", "")
       END IF
 
-      !-- Tilting ------------------------------------------------------------------------------
       CALL tilt_tensor (mono_opt, mono_opt)
-
-      !-- ------------------------------------------------------------------ RS ordering
 
       CALL checksym (mono_opt, mono_sym)
 
@@ -333,6 +316,7 @@ DO ii_lines = 1, lines
       ao1=a
       po1=p
       eo1=e
+
       IF ( rprt_mat .EQV. .TRUE. ) THEN
          CALL write_matrix(orth_opt, 1_ik, "Orthotropic optimised stage 1", "")
          WRITE(*, '(A)') "Orthotropic - 1st stage"
@@ -348,6 +332,9 @@ DO ii_lines = 1, lines
       ao2=a
       po2=p
       eo2=e
+
+      t2nd(4, ii_lines)%euclid_ang = (/ a, p, e /)
+
       IF ( rprt_mat .EQV. .TRUE. ) THEN
          CALL write_matrix(orth_opt, 1_ik, "Orthotropic optimised stage 2", "")
       END IF
@@ -376,9 +363,7 @@ DO ii_lines = 1, lines
    Avg_DoA_InO  = Sum_DoA_InO  / REAL(ii_lines, rk)                            ! Valid, because zeromatrices are considererd empty volume - therefore part of average
    Avg_DoA_Orth = Sum_DoA_Orth / REAL(ii_lines, rk)
 
-   !----------------------------------------------------------------------------------------------
    CALL CPU_TIME(finish)
-   !----------------------------------------------------------------------------------------------
 
    CALL checksym (t2nd(1, ii_lines)%Smat, t2nd(2, ii_lines)%Smat)     !-- Assignment criteria 0
    t2nd(3, ii_lines)%Smat = mono_sym                                  !-- Assignment criteria 1 - monotropic
@@ -394,24 +379,41 @@ DO ii_lines = 1, lines
   END IF
 END DO
 
-! ----------------------------------------------------------------------------------------------
-! -- copy optimised tensors to files
+! copy optimised tensors to files
+! write header
+DO ii =2, 4
+   OPEN( UNIT=un(ii), FILE=TRIM(flnm(ii)), STATUS='NEW' )      ! Open all output files
+   CALL insertstr(header, "euclid_alpha, euclid_phi, euclid_eta", LEN_TRIM(header)+1_ik)
+   WRITE(un(ii), '(A)') TRIM(header)
+END DO
+
 DO ii = 1, how_many_lines
    IF ( t2nd(1, ii)%thres_low      .EQV.  .TRUE. ) THEN
       IF (  t2nd(1, ii)%thres_high .EQV.  .TRUE. ) THEN
          IF ( t2nd(3, ii)%del      .EQV. .FALSE. ) THEN
             IF ( t2nd(4, ii)%del   .EQV. .FALSE. ) THEN
-               write(*,*) "Yes."
                DO jj=2, 4
                   CR_str = " "
-                  write( string, '(F12.3)' ) t2nd(1, ii)%dn
-                  CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
+                  WRITE( string, '(F12.3)' ) t2nd(1, ii)%dn
+                  CALL insertstr(CR_str, TRIM(string), LEN_TRIM(CR_str)+1_ik)
                   DO mm=1, 6
                      DO nn=1, 6             ! Acts like a header sorting algorithm
-                        write( string, '(F12.3)' ) t2nd(jj, ii)%Smat(nn,mm)
-                        CALL insertstr(CR_str, TRIM(string)//", ", LEN_TRIM(CR_str)+1_ik)
+                        WRITE( string, '(F12.3)' ) t2nd(jj, ii)%Smat(nn,mm)
+                        CALL insertstr(CR_str, ", "//TRIM(string), LEN_TRIM(CR_str)+1_ik)
                      END DO
                   END DO
+
+                  ! write euclidean angles of optimized tensors to file - spatial orientation
+                  CALL insertstr(CR_str, ", ", LEN_TRIM(CR_str)+1_ik) ! hardcoded workaround..... for specific header
+                  DO kk=1, 3
+                     WRITE( string, '(F12.3)' ) t2nd(jj, ii)%euclid_ang(kk)
+                     ! write(*,*)jj
+                     ! write(*,*)kk
+                     ! write(*,*) t2nd(jj, ii_lines)%euclid_ang(kk)
+                     CALL insertstr(CR_str, ", "//TRIM(string), LEN_TRIM(CR_str)+1_ik)
+                  END DO
+
+                  ! write string to file
                   WRITE (un(jj), '(A)') TRIM(CR_str)
                END DO
             END IF
@@ -420,17 +422,20 @@ DO ii = 1, how_many_lines
    END IF
 END DO
 
+! close files
+DO ii =2, 4
+   CLOSE( UNIT=un(ii))
+END DO
+
 ii=lines
-!----------------------------------------------------------------------------------------------
-!-- Print final output
-!--
+
+! Print final output
 WRITE(*, '(A)')
 WRITE(*, '(A)'   , advance='NO' ) " Program finished."
 WRITE(*, '(I5,A)', advance='YES') zero_matrix_counter," lines contained thresholded tensors."
 WRITE(*, '(A)')
 WRITE(*, "(A)")  "----------------------------------------------------------------"
 
-!-- lots of potential to simplify
 9999 CONTINUE
 
 END PROGRAM tensor_optimizer
