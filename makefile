@@ -61,12 +61,12 @@ MAIN_bin = $(bin_dir)tensor_optimizer$(bin_suf)
 # --------------------------------------------------------------------------------------------------
 # Generate objects
 #
-f-objects = $(obj_dir)mod_standards$(obj_ext)                          \
-						$(obj_dir)mod_stringmod$(obj_ext)                          \
-						$(obj_dir)mod_file_routines$(obj_ext)                      \
-						$(obj_dir)math_routines$(obj_ext)          			           \
-						$(obj_dir)opt_stiffness$(obj_ext)               		 		   \
-						$(obj_dir)tensor_optimizer$(obj_ext)
+f-objects = $(obj_dir)mod_standards$(obj_ext) \
+			$(obj_dir)mod_stringmod$(obj_ext) \
+			$(obj_dir)mod_file_routines$(obj_ext) \
+			$(obj_dir)math_routines$(obj_ext) \
+			$(obj_dir)opt_stiffness$(obj_ext) \
+			$(obj_dir)tensor_optimizer$(obj_ext)
 # --------------------------------------------------------------------------------------------------
 # Begin Building
 all: $(MAIN_bin)
@@ -97,21 +97,21 @@ $(obj_dir)mod_stringmod$(obj_ext):$(mod_dir)standards$(mod_ext)	$(f-src_dir)stri
 	$(compiler) $(c_flags_f90) -c $(f-src_dir)stringmod$(f90_ext) -o $@
 # -------------------------------------------------------------------------------------------------
 # inlining module
-$(obj_dir)opt_stiffness$(obj_ext):$(mod_dir)standards$(mod_ext)					 \
-																			$(mod_dir)math_routines$(mod_ext)  \
-	 																		$(f-src_dir)mod_opt_stiffness$(f90_ext)
+$(obj_dir)opt_stiffness$(obj_ext):$(mod_dir)standards$(mod_ext) \
+								$(mod_dir)math_routines$(mod_ext)  \
+								$(f-src_dir)mod_opt_stiffness$(f90_ext)
 	@echo "---------------------------------------"
 	@echo "-- Compiles: " $(f-src_dir)mod_opt_stiffness$(f90_ext) "--------------------"
 	$(compiler) $(c_flags_f90) -c $(f-src_dir)mod_opt_stiffness$(f90_ext) -o $@
 
 # --------------------------------------------------------------------------------------------------
 # MAIN OBJECT
-$(obj_dir)tensor_optimizer$(obj_ext):$(mod_dir)standards$(mod_ext) 	\
-														 $(mod_dir)math_routines$(mod_ext)      \
-                             $(mod_dir)strings$(mod_ext)          	\
-														 $(mod_dir)file_routines$(mod_ext)			\
-														 $(mod_dir)opt_stiffness$(mod_ext)     	\
-														 $(f-src_dir)tensor_optimizer$(f90_ext)
+$(obj_dir)tensor_optimizer$(obj_ext):$(mod_dir)standards$(mod_ext) \
+							$(mod_dir)math_routines$(mod_ext) \
+							$(mod_dir)strings$(mod_ext) \
+							$(mod_dir)file_routines$(mod_ext) \
+							$(mod_dir)opt_stiffness$(mod_ext) \
+							$(f-src_dir)tensor_optimizer$(f90_ext)
 	@echo "---------------------------------------"
 	@echo "-- Compiles: " $(f-src_dir)tensor_optimizer$(f90_ext) "--------------------"
 	$(compiler) $(c_flags_f90) -c $(f-src_dir)tensor_optimizer$(f90_ext) -o $@
