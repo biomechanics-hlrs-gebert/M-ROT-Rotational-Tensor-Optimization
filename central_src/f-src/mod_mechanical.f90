@@ -12,7 +12,25 @@ USE global_std
 
 IMPLICIT NONE
 
-! Add other parameters if necessary.
+!------------------------------------------------------------------------------
+! Describe a tensor and its state in respect to the position of the control
+! volume. Required to fully trace the origin of a stiffness matrix (tensor).
+! 
+! It is expected that all other information like domain size, filter options 
+! etc. are described by the meta file format!
+!------------------------------------------------------------------------------
+TYPE tensor_2nd_rank
+   INTEGER :: crit = 0      ! 0=not opt, 1=monotropic, 2=orthotropic
+   REAL(KIND=rk) :: dmn     ! Number of the control volume
+   REAL(KIND=rk) :: density ! Percentage of monolothic young modulus
+   REAL(KIND=rk) :: Doa     ! Degree of anisotropy
+   REAL(KIND=rk), DIMENSION(3)   :: euclid_ang = 0._rk
+   REAL(KIND=rk), DIMENSION(6,6) :: mat = 0._rk
+END TYPE tensor_2nd_rank
+
+!------------------------------------------------------------------------------
+! Characterize a material
+!------------------------------------------------------------------------------
 TYPE materialcard
     REAL(KIND=rk) :: E
     REAL(KIND=rk) :: nu
@@ -24,7 +42,7 @@ CONTAINS
 
 !------------------------------------------------------------------------------
 ! FUNCTION: lamee_lambda
-!------------------------------------------------------------------------------ 
+!------------------------------------------------------------------------------
 !> @author Johannes Gebert, gebert@hlrs.de, HLRS/vM
 !
 !> @brief

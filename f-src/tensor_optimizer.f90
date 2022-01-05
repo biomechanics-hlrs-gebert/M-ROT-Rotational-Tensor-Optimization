@@ -1,119 +1,65 @@
-!----------------------------------------------------------------------------------------------
-!--
-!-- Program to clean and optimise the entries of a csv file containing 2nd order R6x6
-!-- stiffness tensors. It's intended to provide plausible data from bone tissue
-!--
-!-- Additionally, the tensors will be optimised and sorted
-!--
-!-- \author:                Johannes Gebert        (HLRS, NUM)
-!--
-!-- \date 27.10.2020
-!-- \modified 09.03.2021
-!--
-!-- The program is the result of a couple of investigations in optimising, sorting and
-!-- rotating R6x6 2nd order stiffness tensors.
-!--
-!-- Known deficits within this Program:
-!--
-!--    There still are invalid optimised tensors.
-!--
-!--    Crit_mono, Crit_orth and Degree of Anisotropy address the same issue, however it's not
-!--       entirely clear, which solution will be the gold standard for ongoing work.
-!--    Comparing Input DoA with optimised DoA may be unnecessary.
-!--    Some Variables can be combined to an array to apply recurring operations to one op.
-!--    The file handling and checking is at a very early stage of development and may need
-!--       further improvements.
-!--    Compilation is done via a bash script. A makefile may be nice :-)
-!--
-!-- Remarks:
-!--
-!--    The Tensors are read via a csv-file. On Linux, it needs no file name extension
-!--    The Tensors are read within a loop in which they are filtered first.
-!--    During reading the csv, the Tensors are placed within the array according to their
-!--       domain number! Not according to their position within the csv file.
-!--       This ensures sorting the Tensors without much computational effort.
-!--    Optimising by two stages to 1° / 0.025° provides excellent results.
-!--       However, for monotropic optimisations, there are some pretty bad optimised tensors...
-!--    After optimising the tensors, it's necessary to tilt them to S11>S22>S33
-!--       This will give a plausible sorting AND a measure for stiffness trajectories
-!--
-!----------------------------------------------------------------------------------------------
-!-- Entries with less then 0.1% of the true stiffness are designated as remainder
-!-- Entries with more then 100% of the true stiffness are designated as remainder
-!-- The tensors are rotated during the optimisation to get the following criteria:
-!-- S11 > S22 > S33
-!-- It works with a hardcoded, parametrized Young-Modulus (E/EY)
-!--
-!-- Keeps the original file with has to be given as command argument
-!-- CR0 - sym checked tensors
-!-- CR1 - monotropic  optimised tensors
-!-- CR2 - orthotropic optimised tensors
-!-- ignores zero-tensors/domains
-!----------------------------------------------------------------------------------------------
+!------------------------------------------------------------------------------
+! PROGRAM: Rotational Tensor Optimization
+!------------------------------------------------------------------------------
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> \date 27.10.2020
+!> \modified 05.01.2022
+!------------------------------------------------------------------------------
 PROGRAM tensor_optimizer
 
-USE, INTRINSIC :: iso_fortran_env, ONLY : stdin=>input_unit, &
-                                          stdout=>output_unit, &
-                                          stderr=>error_unit
-USE standards
-USE strings
+USE global_std
+USE meta
+USE user_interaction
+USE formatted_plain
+USE MPI
 USE opt_stiffness
-! USE operating_System
-
 
 IMPLICIT NONE
 
-  !----------------------------------------------------------------------------------------------
-  !-- Ignore zero matrices by commenting in the according lines.
-  !-- Handling der Nullmatrizen über diverse Kommentierungen im file.
-  !--
-  !-- Variablen zum Programm verwalten und Rechenzeit sparen
-  INTEGER     (KIND=ik)                                      :: zero_matrix_counter, stat
-  REAL        (KIND=rk)                                      :: percent
+
+! Parameter
+INTEGER(KIND=ik), PARAMETER :: debug = 2   ! Choose an even integer!!
+
+  INTEGER (KIND=ik) :: zero_matrix_counter, stat
+  REAL    (KIND=rk) :: percent
 
   !-- Allgemeine Laufvariablen um numerischen Kernel zu steuern
-  INTEGER     (KIND=ik)                                      :: ii_lines, last_ii_lns_rlvnt, &
+  INTEGER     (KIND=ik) :: ii_lines, last_ii_lns_rlvnt, &
        ii, jj, kk, ll, mm, nn, oo, pp, vali, zz
-  REAL        (KIND=rk), DIMENSION(6,6)                      :: mono_opt, orth_opt, mono_sym, orth_sym, M_Null
-  INTEGER     (KIND=ik), PARAMETER                           :: header_row_header=1
-  CHARACTER   (LEN=200)                                      :: input_file, header
-  CHARACTER   (LEN=1000)                                     :: line, CR_str
-  CHARACTER   (LEN=12)                                       :: string
-  INTEGER     (KIND=ik), PARAMETER                           :: n_cols=38, header_row=1
-  INTEGER     (KIND=4)                                       :: lines, lunit=10, how_many_lines=10
-  CHARACTER   (LEN=10)                                       :: hw_mny_lns
-  INTEGER     (KIND=ik), DIMENSION(4)                        :: un
-  INTEGER  (KIND=ik)                                         :: ios, ntokens
-  CHARACTER(len=mcl)                                         :: tokens(100)
+  REAL        (KIND=rk), DIMENSION(6,6) :: mono_opt, orth_opt, mono_sym, orth_sym, M_Null
+  INTEGER     (KIND=ik), PARAMETER      :: header_row_header=1
+  CHARACTER   (LEN=200)                 :: input_file, header
+  CHARACTER   (LEN=1000)                :: line, CR_str
+  CHARACTER   (LEN=12)                  :: string
+  INTEGER     (KIND=ik), PARAMETER      :: n_cols=38, header_row=1
+  INTEGER     (KIND=4)                  :: lines, lunit=10, how_many_lines=10
+  CHARACTER   (LEN=10)                  :: hw_mny_lns
+  INTEGER     (KIND=ik), DIMENSION(4)   :: un
+  INTEGER  (KIND=ik)                    :: ios, ntokens
+  CHARACTER(len=mcl)                    :: tokens(100)
 
-  TYPE :: csv_data
-      REAL    (KIND=rk)                                      :: dn, thres, Doa        ! REAL damit write bei csv geht!!
-      REAL    (KIND=rk), DIMENSION(6,6)                      :: Smat
-      REAL    (KIND=rk), DIMENSION(3)                        :: euclid_ang=(/ 0._rk, 0._rk, 0._rk /)
-      INTEGER (KIND=ik)                                      :: zrmtx=0, optimised=0
-      LOGICAL (KIND=rk)                                      :: thres_high=.TRUE., thres_low=.TRUE., del=.FALSE.   ! initialisation
-  END TYPE csv_data
 
-  TYPE(csv_data)       , DIMENSION(:,:) , ALLOCATABLE        :: t2nd                  ! Tensor of 2nd order R6x6
-  CHARACTER   (LEN=200), DIMENSION(4)                        :: flnm
-  CHARACTER   (LEN=*)  , PARAMETER                           :: int_fmt='(I5)'
-  CHARACTER   (LEN=*)  , PARAMETER                           :: REAL_fmt='(F9.3)'
-  CHARACTER   (LEN=*)  , PARAMETER                           :: REAL_int='(F9.0)'
-  REAL        (KIND=rk)                                      :: start, finish
-  INTEGER     (KIND=ik)                                      :: ETAt
+  TYPE(csv_data), DIMENSION(:,:) , ALLOCATABLE :: t2nd                  ! Tensor of 2nd order R6x6
+  CHARACTER(LEN=200), DIMENSION(4) :: flnm
+  CHARACTER(LEN=*)  , PARAMETER :: int_fmt='(I5)'
+  CHARACTER(LEN=*)  , PARAMETER :: REAL_fmt='(F9.3)'
+  CHARACTER(LEN=*)  , PARAMETER :: REAL_int='(F9.0)'
+  REAL     (KIND=rk)            :: start, finish
+  INTEGER  (KIND=ik)            :: ETAt
 
   !-- Optimization variables
-  REAL        (KIND=rk)                                      :: a,p,e
-  REAL        (KIND=rk)                                      :: Sum_DoA_Mono=0, Sum_DoA_Orth=0, Sum_DoA_InO=0, Sum_DoA_InM=0
-  REAL        (KIND=rk)                                      :: Avg_DoA_Mono, Avg_DoA_Orth, Avg_DoA_InO, Avg_DoA_InM
-  REAL        (KIND=rk)                                      :: am1, pm1, em1, am2, pm2, em2, ao1, po1, eo1, ao2, po2, eo2
+  REAL(KIND=rk) :: a,p,e
+  REAL(KIND=rk) :: Sum_DoA_Mono=0, Sum_DoA_Orth=0, Sum_DoA_InO=0, Sum_DoA_InM=0
+  REAL(KIND=rk) :: Avg_DoA_Mono, Avg_DoA_Orth, Avg_DoA_InO, Avg_DoA_InM
+  REAL(KIND=rk) :: am1, pm1, em1, am2, pm2, em2, ao1, po1, eo1, ao2, po2, eo2
 
   !-- Parameters
-  INTEGER     (KIND=ik), PARAMETER                           :: EY=5600
-  REAL        (KIND=rk), PARAMETER                           :: factor_low_thres=0.001
-  CHARACTER   (LEN=3)                                        :: calculat
-  INTEGER     (KIND=ik)                                      :: calcfail=0
-  LOGICAL                                                    :: rprt_mat, rprt
+  INTEGER     (KIND=ik), PARAMETER :: EY=5600
+  REAL        (KIND=rk), PARAMETER :: factor_low_thres=0.001
+  CHARACTER   (LEN=3)              :: calculat
+  INTEGER     (KIND=ik)            :: calcfail=0
+  LOGICAL                          :: rprt_mat, rprt
 
 !-- DEFAULTS ----- rprt=.TRUE. ----- rprt_mat=.FALSE. -----------------------------------------
 rprt=.TRUE.
@@ -146,10 +92,10 @@ ALLOCATE(t2nd(4, lines))
 
 M_Null(:,:)=.0_rk
 
-un(1) = 29_ik            ! input
-un(2) = 30_ik            ! out CR0
-un(3) = 31_ik            ! out CR1
-un(4) = 32_ik            ! out CR2
+un(1) = 29_ik ! input
+un(2) = 30_ik ! out CR0
+un(3) = 31_ik ! out CR1
+un(4) = 32_ik ! out CR2
 
 !-- Initialize and open  the csv-files to write optimized data
 OPEN( UNIT=un(1), FILE=TRIM(input_file ), STATUS='OLD' )
@@ -224,7 +170,7 @@ DO ii_lines = 1, lines
       WRITE(*,"(A)")
       WRITE(*,'(A,I5,A,I5)') " Domain No.:", INT(t2nd(1, ii_lines)%dn, ik), " of", INT(how_many_lines, ik)
       WRITE(*,"(A)")
-      !----------------------------------------------------------------------------------------------
+      !------------------------------------------------------------------------------
       WRITE(*,'(A,F6.1,A,F6.1,A,F6.1,2A)')" alpha: ",am1,"  phi: ",pm1,&
            & "  eta: ",em1, "  Min ","monotropic"
       WRITE(*,'(A,F6.1,A,F6.1,A,F6.1,2A)')" alpha: ",am2,"  phi: ",pm2,&

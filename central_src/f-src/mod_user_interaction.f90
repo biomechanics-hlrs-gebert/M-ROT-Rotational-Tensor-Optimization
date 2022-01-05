@@ -324,4 +324,43 @@ END IF
 
 END SUBROUTINE print_err_stop
 
+
+!------------------------------------------------------------------------------
+! SUBROUTINE: estimated_time_of_arrival
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief
+!> Calculates the estimated time of arrival. Best suited for Julius or other 
+!> interactive notebooks/desktops/...
+!
+!> @param[in] sec Handle of file to print to
+!> @param[out] string Output string of the ETA. Printed to std_out if not given
+!------------------------------------------------------------------------------  
+SUBROUTINE estimated_time_of_arrival(sec, string)
+
+    INTEGER(KIND=ik), INTENT(IN) :: sec
+    CHARACTER(LEN=scl), INTENT(OUT), OPTIONAL :: string
+
+    INTEGER(KIND=ik) :: mins, hours, secs, seconds, mins_s, remainder
+    CHARACTER(LEN=scl) :: str
+
+    mins_s    = MODULO(sec,  3600_ik)
+    seconds   = MODULO(mins_s, 60_ik)
+    remainder = MODULO(seconds, 1_ik)
+
+    hours = (sec-mins_s) / 3600_ik
+    mins  = (mins_s-seconds) / 60_ik
+    secs  = (seconds-remainder)
+
+    write(string,'(I3,2(A,I2),A)') hours,":",mins,":",secs," hhh:mm:ss"
+
+    IF(PRESENT(string)) THEN
+        string = str
+    ELSE
+        WRITE(std_out, FMT_TXT) "ETA: "//TRIM(ADJUSTL(str))
+    END IF
+
+END SUBROUTINE estimated_time_of_arrival
+
 END MODULE user_interaction

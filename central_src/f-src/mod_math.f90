@@ -13,11 +13,13 @@ USE global_std
 USE strings
 
 IMPLICIT NONE
+
 REAL(KIND=rk), PARAMETER :: num_zero   = 1.E-9
 REAL(KIND=rk), PARAMETER :: sq2        = sqrt(2._rk)
 REAL(KIND=rk), PARAMETER :: pi         = 4.D0*DATAN(1.D0) !acos(-1._rk)
 REAL(KIND=rk), PARAMETER :: inv180     = 1._rk/180._rk
 REAL(KIND=rk), PARAMETER :: pi_div_180 = acos(-1._rk)/180._rk
+REAL(KIND=rk), PARAMETER :: alpha      = 90*4.D0*DATAN(1.D0)/180 ! 90*pi/180, argument for rot trans
 
 !-- Higher dimensional numbers
 TYPE Quaternion
@@ -38,17 +40,17 @@ CONTAINS
 !------------------------------------------------------------------------------  
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
 !
-!> @param[in] alpha Angle
+!> @param[in] angle Angle
 !> @return[out] aa Output transformation matrix
 !------------------------------------------------------------------------------  
-Function rot_x(alpha) Result(aa)
+Function rot_x(angle) Result(aa)
 
-    Real(kind=rk), intent(in) :: alpha
+    Real(kind=rk), intent(in) :: angle
     Real(kind=rk), Dimension(3,3) :: aa
 
     aa(1,:) = [ 1._rk ,   0._rk    ,   0._rk     ]
-    aa(2,:) = [ 0._rk , cos(alpha) , -sin(alpha) ]
-    aa(3,:) = [ 0._rk , sin(alpha) ,  cos(alpha) ]
+    aa(2,:) = [ 0._rk , cos(angle) , -sin(angle) ]
+    aa(3,:) = [ 0._rk , sin(angle) ,  cos(angle) ]
 
 End Function rot_x
 
@@ -57,17 +59,17 @@ End Function rot_x
 !------------------------------------------------------------------------------  
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
 !
-!> @param[in] alpha Angle
+!> @param[in] angle Angle
 !> @return[out] aa Output transformation matrix
 !------------------------------------------------------------------------------  
-Function rot_y(alpha) Result(aa)
+Function rot_y(angle) Result(aa)
 
-    Real(kind=rk), intent(in) :: alpha
+    Real(kind=rk), intent(in) :: angle
     Real(kind=rk), Dimension(3,3) :: aa
 
-    aa(1,:) = [ cos(alpha), 0._rk,  sin(alpha) ]
+    aa(1,:) = [ cos(angle), 0._rk,  sin(angle) ]
     aa(2,:) = [   0._rk   , 1._rk,   0._rk     ]
-    aa(3,:) = [-sin(alpha), 0._rk,  cos(alpha) ]
+    aa(3,:) = [-sin(angle), 0._rk,  cos(angle) ]
 
 End Function rot_y
 
@@ -76,16 +78,16 @@ End Function rot_y
 !------------------------------------------------------------------------------  
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
 !
-!> @param[in] alpha Angle
+!> @param[in] angle Angle
 !> @return[out] aa Output transformation matrix
 !------------------------------------------------------------------------------  
-Function rot_z(alpha) Result(aa)
+Function rot_z(angle) Result(aa)
 
-    Real(kind=rk), intent(in) :: alpha
+    Real(kind=rk), intent(in) :: angle
     Real(kind=rk), Dimension(3,3) :: aa
 
-    aa(1,:) = [ cos(alpha), -sin(alpha), 0._rk ]
-    aa(2,:) = [ sin(alpha),  cos(alpha), 0._rk ]
+    aa(1,:) = [ cos(angle), -sin(angle), 0._rk ]
+    aa(2,:) = [ sin(angle),  cos(angle), 0._rk ]
     aa(3,:) = [   0._rk   ,   0._rk    , 1._rk ]
 
 End Function rot_z
