@@ -19,7 +19,6 @@ REAL(KIND=rk), PARAMETER :: sq2        = sqrt(2._rk)
 REAL(KIND=rk), PARAMETER :: pi         = 4.D0*DATAN(1.D0) !acos(-1._rk)
 REAL(KIND=rk), PARAMETER :: inv180     = 1._rk/180._rk
 REAL(KIND=rk), PARAMETER :: pi_div_180 = acos(-1._rk)/180._rk
-REAL(KIND=rk), PARAMETER :: alpha      = 90*4.D0*DATAN(1.D0)/180 ! 90*pi/180, argument for rot trans
 
 !-- Higher dimensional numbers
 TYPE Quaternion
@@ -34,6 +33,47 @@ INTERFACE zero_thres
 END INTERFACE zero_thres
 
 CONTAINS
+
+!------------------------------------------------------------------------------
+! SUBROUTINE: transpose_mat
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief
+!> Spatially transpose a R6x6 matrix (2nd rank tensor).
+!
+!> @param[in] tensor_in Input tensor
+!> @param[in] pos_in Requested combination of euler angles.
+!> @param[out] tensor_out Output tensor
+!------------------------------------------------------------------------------
+SUBROUTINE transpose_mat (tensor_in, pos_in, tensor_out)
+
+     REAL(KIND=rk), DIMENSION(6,6), INTENT(IN)  :: tensor_in
+     REAL(KIND=rk), DIMENSION(3)  , INTENT(IN)  :: pos_in
+     REAL(KIND=rk), DIMENSION(6,6), INTENT(OUT) :: tensor_out
+
+     REAL(KIND=rk)                 :: alpha, phi, eta
+     REAL(KIND=rk), DIMENSION(3)   :: n
+     REAL(KIND=rk), DIMENSION(3,3) :: aa
+
+     !------------------------------------------------------------------------------
+     !  Degrees as input, radian as output to sin/cos
+     !------------------------------------------------------------------------------
+     alpha = REAL(pos_in(1)) * pi / 180._rk
+     phi   = REAL(pos_in(2)) * pi / 180._rk
+     eta   = REAL(pos_in(3)) * pi / 180._rk
+
+     n = [ COS(phi)*SIN(eta), SIN(phi)*SIN(eta), COS(eta) ]
+
+     n = n / SQRT(SUM(n*n))
+
+     aa = rot_alg(n, alpha)
+
+     BB = tra_R6(aa)
+
+     tensor_out = MATMUL(MATMUL(TRANSPOSE(BB), tensor_in), BB)
+
+END SUBROUTINE transpose_mat
 
 !------------------------------------------------------------------------------
 ! FUNCTION: rot_x

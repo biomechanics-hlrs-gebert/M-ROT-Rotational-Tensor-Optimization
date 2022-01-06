@@ -1,4 +1,4 @@
-# Tensor Opimization
+# Rotational Tensor Optimization
 
 Reads *.csv (comma separated value) files with one 2nd rank R6x6 tensor per row.
 

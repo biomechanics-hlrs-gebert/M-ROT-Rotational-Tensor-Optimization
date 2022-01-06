@@ -19,14 +19,13 @@ IMPLICIT NONE
 ! It is expected that all other information like domain size, filter options 
 ! etc. are described by the meta file format!
 !------------------------------------------------------------------------------
-TYPE tensor_2nd_rank
-   INTEGER :: crit = 0      ! 0=not opt, 1=monotropic, 2=orthotropic
-   REAL(KIND=rk) :: dmn     ! Number of the control volume
+TYPE tensor_2nd_rank_R66
+   INTEGER(KIND=ik) :: dmn  ! Number of the control volume
    REAL(KIND=rk) :: density ! Percentage of monolothic young modulus
    REAL(KIND=rk) :: Doa     ! Degree of anisotropy
-   REAL(KIND=rk), DIMENSION(3)   :: euclid_ang = 0._rk
+   REAL(KIND=rk), DIMENSION(3)   :: pos = 0._rk ! Positioon (deg) of alpha, eta, phi
    REAL(KIND=rk), DIMENSION(6,6) :: mat = 0._rk
-END TYPE tensor_2nd_rank
+END TYPE tensor_2nd_rank_R66
 
 !------------------------------------------------------------------------------
 ! Characterize a material

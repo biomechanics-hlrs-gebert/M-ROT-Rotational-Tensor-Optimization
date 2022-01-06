@@ -4,551 +4,235 @@
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !
 ! @description: 
-!> Module for optimising R6x6 anisotropic tensors
-!
+!> Module for optimizing R6x6 anisotropic tensors.
 !------------------------------------------------------------------------------
 MODULE opt_stiffness
 
 USE global_std
+USE mechanical
 USE math
+USE user_interaction
 
 IMPLICIT NONE
+
+!------------------------------------------------------------------------------
+! Following variables are declared globally, but mustn't be send via mpi(!)
+! Declaring them globally makes calling functions and exporting the computed
+! criteria space of a tensor easier. 
+!------------------------------------------------------------------------------  
+! tin            Input tensor
+! dig            Input angles (Often = 0)
+! pm_steps       +/- steps of the angle to check with.
+! intervall      stps +/- intervall = range of optimization of this call.
+! tout           Output tensor
+! dog            Output angles
+!------------------------------------------------------------------------------  
+TYPE(tensor_2nd_rank_R66) :: tin, tout
+INTEGER(KIND=ik), DIMENSION(3) :: pm_steps
+REAL(KIND=rk)   , DIMENSION(3) :: intervall, dig, dog
+REAL(KIND=rk)   , DIMENSION(:,:,:), ALLOCATABLE :: crit
 
 CONTAINS
 
 !------------------------------------------------------------------------------
-! SUBROUTINE: opt_eff_stiff_mono
+! SUBROUTINE: opt_stiff
 !------------------------------------------------------------------------------  
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !
-!> @param[in] angle Angle
-!> @param[in] angle Angle
-!> @param[in] angle Angle
-!> @param[in] angle Angle
-!> @param[in] angle Angle
-!> @return[out] aa Output transformation matrix
-!------------------------------------------------------------------------------ 
-SUBROUTINE opt_eff_stiff_mono (EE, deg_a, stp_a, deg_p, stp_p, deg_e, stp_e, intervall, &
-       opt_tin, a, p, e, outp)
-!> Choose monotropic OR otrhotropic optimization
+!> @Brief:
+!> Rotate around all 3 rot dof until objective function is min. 
 !> Initial degrees must be integer!
-!> Change mode to strings - way more convenient
+!
+!> @param[in] mode "monotropic" or "orthotropic"
+!------------------------------------------------------------------------------ 
+SUBROUTINE opt_stiff(mode)
 
-    REAL   (KIND=rk), INTENT(IN), DIMENSION(6,6) :: EE                    ! tin to opimise
-    INTEGER(KIND=ik), INTENT(IN)                 :: deg_a, deg_e, deg_p   ! orientation to start with
-    INTEGER(KIND=ik), INTENT(IN)                 :: stp_a, stp_e, stp_p   ! Amount of steps to increase
-    REAL   (KIND=rk), INTENT(IN) , OPTIONAL                 :: intervall  ! stepwidth
-    REAL   (KIND=rk), INTENT(OUT), OPTIONAL, DIMENSION(6,6) :: opt_tin    ! optimised tin
-    REAL   (KIND=rk), INTENT(OUT), OPTIONAL                 :: a,p,e      ! resulting angles
-    LOGICAL, INTENT(IN), OPTIONAL :: outp ! check whether print result
+CHARACTER(LEN=*), INTENT(IN) :: mode
 
+INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps, counter
+
+REAL(KIND=rk) :: min, alpha, eta, phi
+REAL(KIND=rk), DIMENSION(6,6) :: tmp_r6x6
+
+!----------------------------------------------------------------------------------------------
+! Initialize variables
+!----------------------------------------------------------------------------------------------
+ttl_steps = 0_ik
+counter = 0_ik
+mask = 0_ik
+min = 10E09_ik
+
+!----------------------------------------------------------------------------------------------
+! Total amount of steps: requested angle +/- steps --> 2*steps + value --> (pm_steps*2)+1
+!----------------------------------------------------------------------------------------------
+ttl_steps = (pm_steps*2_ik)+1_ik
+
+!----------------------------------------------------------------------------------------------
+! Copy input to output tensor. Important to keep domain data etc.
+!----------------------------------------------------------------------------------------------
+tout = tin
+
+!----------------------------------------------------------------------------------------------
+! Choose between monotropic or orthotropic optimization
+!----------------------------------------------------------------------------------------------
+SELECT CASE(TRIM(ADJUSTL(mode)))
+    CASE('monotropic')
     !----------------------------------------------------------------------------------------------
-
-    REAL(KIND=rk) :: kk,   kk_phi,   kk_eta
-    REAL(KIND=rk) :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
-    INTEGER(KIND=ik) :: ii_c, ii_phi_c, ii_eta_c
-    REAL   (KIND=rk) :: min, intval
-
-    REAL(KIND=rk), DIMENSION(6,6) :: BB, tmp_r6x6
-    REAL(KIND=rk), DIMENSION(:,:,:), ALLOCATABLE :: crit
-
-    LOGICAL :: op=.FALSE.
-
-    ALLOCATE(crit(stp_a, stp_p, stp_e))
-
-    IF (PRESENT(intervall)) intval = intervall
-    IF (PRESENT(outp))          op = outp
-    min=10000000_ik        !-- arbitrary initial value
+    ! After multiplication with mask, the 2nd rank R6x6 tensor entries that are zero in an 
+    ! monotropic scenario are given like the tensor was given to the call opt_stiff.
+    !
+    ! The values of the mask are 2 instead of 1, because only the first and the fourth quadrant
+    ! of the matrix are taken into account.
+    !
+    ! The matrix mask needs no recurring initialization, as the values mustn't change during 
+    ! optimization (program runtime in general).
     !----------------------------------------------------------------------------------------------
-    !-- DEBUG -------------------------------------------------------------------------------------
-    ! write(*,'(A,I5)')"deg_a=", deg_a
-    ! write(*,'(A,I5)')"deg_p=", deg_p
-    ! write(*,'(A,I5)')"deg_e=", deg_e
-    ! write(*,'(A,I5)')"stp_a=", stp_a
-    ! write(*,'(A,I5)')"stp_p=", stp_p
-    ! write(*,'(A,I5)')"stp_e=", stp_e
-    ! write(*,'(A,F5.3)')"intervall=", intervall
-    !-- DEBUG -------------------------------------------------------------------------------------
-    !----------------------------------------------------------------------------------------------
+    mask(1:4,5:6) = 2_ik  
 
-    kk_eta = deg_e
-    DO ii_eta_c = 1, stp_e
-       kk_phi = deg_p
-       DO ii_phi_c = 1, stp_p
-          kk = deg_a
-          DO ii_c = 1, stp_a
-             CALL transpose_mat (EE, kk, kk_phi, kk_eta, tmp_r6x6,BB)
-             IF ( mode .eq. 1_ik ) THEN
-                CALL mono_crit (tmp_r6x6,res=crit(ii_c,ii_phi_c,ii_eta_c))
-             ELSE IF ( mode .EQ. 2_ik ) THEN
-                CALL ortho_crit (tmp_r6x6,crit(ii_c,ii_phi_c,ii_eta_c))
-             END IF
-             IF ( min > crit(ii_c,ii_phi_c,ii_eta_c) ) THEN
-                min = crit(ii_c,ii_phi_c,ii_eta_c)
-                kk_s     = kk
-                kk_phi_s = kk_phi
-                kk_eta_s = kk_eta
-             END IF
-             kk = kk + intervall
-          END DO
-          kk_phi = kk_phi + intervall
-       END DO
-       kk_eta = kk_eta + intervall
+CASE('orthotropic')
+    ! Explanation @ opt_stiff_mono
+    mask(1:3,4:6) = 2_ik
+    mask(  4,5:6) = 2_ik
+    mask(  5,  6) = 2_ik
+
+CASE('anisotropic1')
+    ! S11 available only once.
+    mask(1,1) = 1_ik
+
+CASE('anisotropic2')
+    ! S11, S22, S44 available only once.
+    mask(1,1) = 1_ik
+    mask(2,2) = 1_ik
+    mask(3,3) = 1_ik
+
+CASE DEFAULT
+    mssg = "No valid optimization chosen. Check your implementation!"
+    CALL print_err_stop(std_out, mssg, 1)
+
+END SELECT
+
+!----------------------------------------------------------------------------------------------
+! Allocate memory for angle +/- steps.
+! Each call, the system checks whether the space of criteria is allocated.
+! If not --> allocate
+! If ttl_steps changes --> reallocate
+! If Program closes --> Everything alright
+! Nothing gets deallocated without explicit order. This feature enables writing the 
+! space of criteria to a vtk (i.e., scalar field). 
+! @MPI: With mpi, crit may have a different state across the ranks!
+!----------------------------------------------------------------------------------------------
+IF(ALLOCATED(crit)) THEN
+    IF(SHAPE(crit) /= ttl_steps) DEALLOCATE(crit)
+END IF
+
+IF(.NOT. ALLOCATED(crit)) THEN
+    ALLOCATE(crit(ttl_steps(1), ttl_steps(2), ttl_steps(3)))
+END IF
+
+alpha = dig(1) - (intervall(1) * pm_steps(1))
+DO counter(1) = 1_ik, ttl_steps(1)
+
+    eta = dig(2) - (intervall(2) * pm_steps(2))
+    DO counter(2) = 1_ik, ttl_steps(2)
+
+        phi = dig(3) - (intervall(3) * pm_steps(3))
+        DO counter(3) = 1_ik, ttl_steps(3)
+
+            CALL transpose_mat (tin%mat, alpha, eta, phi, tmp_r6x6)
+
+            !-------------------------------------------------------------------------------
+            ! Criteria: Entries that are not zero after multiplication with mask are 
+            ! squared and summed up. Integer power (**2) is quicker than real power (**2.0).
+            ! https://twitter.com/fortrantip/status/1478765410405298176?s=24
+            !-------------------------------------------------------------------------------
+            crit(counter(1), counter(2), counter(3)) = SUM((tmp_r6x6 * mask)**2_ik)  
+
+            !-------------------------------------------------------------------------------
+            ! Update the best position of the output matrix if the criteria is below the 
+            ! current minimum.
+            !-------------------------------------------------------------------------------
+            IF ( min > crit(counter(1), counter(2), counter(3))) THEN
+
+                min = crit(counter(1), counter(2), counter(3))
+
+                tout%pos = [ alpha, eta, phi ]
+            END IF
+
+        phi = phi + intervall(3)
+        END DO
+
+    eta = eta + intervall(2)
     END DO
 
-    !-- After minimising the whole field --> recalc the opt_tin depending on opt angles
-    CALL transpose_mat (EE, kk_s, kk_phi_s, kk_eta_s, opt_tin,BB)
+alpha = alpha + intervall(1)
+END DO
 
-    IF (PRESENT(a)) a = kk_s
-    IF (PRESENT(p)) p = kk_phi_s
-    IF (PRESENT(e)) e = kk_eta_s
+!----------------------------------------------------------------------------------------------
+! Recalculate the best combination of angles.
+!----------------------------------------------------------------------------------------------
+CALL transpose_mat (tin%mat, tout%pos, tout%mat)
 
-  END SUBROUTINE opt_eff_stiff_mono
-
-  subroutine opt_eff_stiff_r812 (mode,EE,deg_a,stp_a,deg_p,stp_p,deg_e,stp_e,intervall,opt_tin,a,p,e,outp)
-
-    !-- Choose monotropic OR otrhotropic optimization 
-    !-- Initial degrees must be integer!
-    !-- Change mode to strings - way more convenient
-
-    integer(kind=ik), intent(in)                               :: mode                   ! Switch between mono=1 and orth=2
-    real(kind=rk), dimension(6,6), intent(in)                  :: EE                     ! tin to opimise
-    integer(kind=ik), intent(in)                               :: deg_a, deg_e, deg_p    ! orientation to start with
-    integer(kind=ik), intent(in)                               :: stp_a, stp_e, stp_p    ! Amount of steps to increase
-    real(kind=rk), intent(in), optional                        :: intervall              ! stepwidth
-    real(kind=rk), dimension(6,6), intent(out), optional       :: opt_tin             ! optimised tin - should be a mandatory one
-    real(kind=rk), intent(out), optional                       :: a,p,e                  ! resulting angles
-    logical, intent(in), optional                              :: outp                   ! check whether print result
-
-    !----------------------------------------------------------------------------------------------
-
-    real(kind=rk)                                              :: kk,   kk_phi,   kk_eta
-    real(kind=rk)                                              :: kk_s, kk_phi_s, kk_eta_s    ! stored variables
-    integer(kind=ik)                                           :: ii_c, ii_phi_c, ii_eta_c
-    real(kind=rk)                                              :: min, intval
-    real(kind=rk), dimension(3)                                :: n
-    real(kind=rk), dimension(3,3)                              :: aa
-    real(kind=rk), dimension(6,6)                              :: BB, tmp_r6x6
-    real(kind=rk), dimension(:,:,:), allocatable               :: crit
-    logical                                                    :: op=.FALSE.
-    character(len=50)                                          :: opt_str
-    Real(kind=8)   , Dimension( 8)                             :: tmp_r8 
-    Real(kind=8)   , Dimension(12)                             :: tmp_r12
-  
-    allocate(crit(stp_a,stp_p,stp_e))
-
-   
-    if (present(intervall)) intval = intervall
-    if (present(outp)) op = outp
-    if ( mode .eq. 1_ik ) then
-        opt_str="monotrop:  "
-    elseif ( mode .eq. 2_ik ) then
-        opt_str="orthotrop:"
-     end if
-     min=10000000_ik        !-- arbitrary initial value
-     !----------------------------------------------------------------------------------------------
-     !-- DEBUG -------------------------------------------------------------------------------------
-     ! write(*,'(A,I5)')"deg_a=", deg_a 
-     ! write(*,'(A,I5)')"deg_p=", deg_p 
-     ! write(*,'(A,I5)')"deg_e=", deg_e 
-     ! write(*,'(A,I5)')"stp_a=", stp_a 
-     ! write(*,'(A,I5)')"stp_p=", stp_p 
-     ! write(*,'(A,I5)')"stp_e=", stp_e 
-     ! write(*,'(A,F5.3)')"intervall=", intervall
-     !-- DEBUG -------------------------------------------------------------------------------------
-     !----------------------------------------------------------------------------------------------
-
-    kk_eta = deg_e
-    Do ii_eta_c = 1, stp_e
-       kk_phi = deg_p
-        Do ii_phi_c = 1, stp_p
-            kk = deg_a
-                Do ii_c = 1, stp_a
-                   call transpose_mat (EE, kk, kk_phi, kk_eta, tmp_r6x6,BB)
-                   if ( mode .eq. 1_ik ) then
-                    tmp_r8(1) = &
-                         BB(6,1) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
-                         +BB(5,1) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
-                         +BB(4,1) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
-                         +BB(3,1) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
-                         +BB(2,1) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
-                         +BB(1,1) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r8(2) = &
-                         BB(6,1) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
-                         +BB(5,1) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
-                         +BB(4,1) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
-                         +BB(3,1) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
-                         +BB(2,1) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
-                         +BB(1,1) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r8( 3) = &
-                         BB(6,2) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
-                         +BB(5,2) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
-                         +BB(4,2) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
-                         +BB(3,2) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
-                         +BB(2,2) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
-                         +BB(1,2) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r8( 4) = &
-                         BB(6,2) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
-                         +BB(5,2) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
-                         +BB(4,2) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
-                         +BB(3,2) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
-                         +BB(2,2) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
-                         +BB(1,2) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r8( 5) = &
-                         BB(6,3) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
-                         +BB(5,3) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
-                         +BB(4,3) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
-                         +BB(3,3) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
-                         +BB(2,3) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
-                         +BB(1,3) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r8( 6) = &
-                         BB(6,3) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
-                         +BB(5,3) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
-                         +BB(4,3) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
-                         +BB(3,3) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
-                         +BB(2,3) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
-                         +BB(1,3) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r8( 7) = &
-                         BB(6,4) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
-                         +BB(5,4) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
-                         +BB(4,4) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
-                         +BB(3,4) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
-                         +BB(2,4) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
-                         +BB(1,4) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r8( 8) = &
-                         BB(6,4) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
-                         +BB(5,4) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
-                         +BB(4,4) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
-                         +BB(3,4) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
-                         +BB(2,4) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
-                         +BB(1,4) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-
-                    crit(ii_c,ii_phi_c,ii_eta_c) = ( &
-                         tmp_r8( 1)*tmp_r8( 1) + tmp_r8( 2)*tmp_r8( 2) + &
-                         tmp_r8( 3)*tmp_r8( 3) + tmp_r8( 4)*tmp_r8( 4) + &
-                         tmp_r8( 5)*tmp_r8( 5) + tmp_r8( 6)*tmp_r8( 6) + &
-                         tmp_r8( 7)*tmp_r8( 7) + tmp_r8( 8)*tmp_r8( 8)   &
-                         )
-                 elseif ( mode .eq. 2_ik ) then
-                    tmp_r12(1) = &
-                         BB(6,1) * &
-                         (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
-                         BB(5,1) * &
-                         (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
-                         BB(4,1) * &
-                         (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
-                         BB(3,1) * &
-                         (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
-                         BB(2,1) * &
-                         (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
-                         BB(1,1) * &
-                         (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
-                    tmp_r12(2) =  &
-                         BB(6,1) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
-                         BB(5,1) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
-                         BB(4,1) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
-                         BB(3,1) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
-                         BB(2,1) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
-                         BB(1,1) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r12(3) = &
-                         BB(6,1) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
-                         BB(5,1) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
-                         BB(4,1) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
-                         BB(3,1) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
-                         BB(2,1) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
-                         BB(1,1) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r12(4) =  &
-                         BB(6,2) * &
-                         (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
-                         BB(5,2) * &
-                         (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
-                         BB(4,2) * &
-                         (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
-                         BB(3,2) * &
-                         (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
-                         BB(2,2) * &
-                         (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
-                         BB(1,2) * &
-                         (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
-                    tmp_r12( 5) = &
-                         BB(6,2) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
-                         BB(5,2) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
-                         BB(4,2) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
-                         BB(3,2) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
-                         BB(2,2) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
-                         BB(1,2) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r12( 6) = &
-                         BB(6,2) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
-                         BB(5,2) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
-                         BB(4,2) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
-                         BB(3,2) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
-                         BB(2,2) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
-                         BB(1,2) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r12( 7) = &
-                         BB(6,3) * &
-                         (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
-                         BB(5,3) * &
-                         (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
-                         BB(4,3) * &
-                         (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
-                         BB(3,3) * &
-                         (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
-                         BB(2,3) * &
-                         (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
-                         BB(1,3) * &
-                         (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
-                    tmp_r12( 8) = &
-                         BB(6,3) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
-                         BB(5,3) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
-                         BB(4,3) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
-                         BB(3,3) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
-                         BB(2,3) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
-                         BB(1,3) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r12( 9) = &
-                         BB(6,3) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
-                         BB(5,3) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
-                         BB(4,3) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
-                         BB(3,3) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
-                         BB(2,3) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
-                         BB(1,3) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r12(10) = &
-                         BB(6,4) * &
-                         (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
-                         BB(5,4) * &
-                         (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
-                         BB(4,4) * &
-                         (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
-                         BB(3,4) * &
-                         (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
-                         BB(2,4) * &
-                         (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
-                         BB(1,4) * &
-                         (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
-                    tmp_r12(11) = &
-                         BB(6,4) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
-                         BB(5,4) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
-                         BB(4,4) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
-                         BB(3,4) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
-                         BB(2,4) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
-                         BB(1,4) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-                    tmp_r12(12) = &
-                         BB(6,5) * &
-                         (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
-                         BB(5,5) * &
-                         (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
-                         BB(4,5) * &
-                         (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
-                         BB(3,5) * &
-                         (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
-                         BB(2,5) * &
-                         (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
-                         BB(1,5) * &
-                         (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
-
-                    crit(ii_c,ii_phi_c,ii_eta_c) = (&
-                         tmp_r12( 1)*tmp_r12( 1) + tmp_r12( 2)*tmp_r12( 2) + tmp_r12( 3)*tmp_r12( 3) + &
-                         tmp_r12( 4)*tmp_r12( 4) + tmp_r12( 5)*tmp_r12( 5) + tmp_r12( 6)*tmp_r12( 6) + &
-                         tmp_r12( 7)*tmp_r12( 7) + tmp_r12( 8)*tmp_r12( 8) + tmp_r12( 9)*tmp_r12( 9) + &
-                         tmp_r12(10)*tmp_r12(10) + tmp_r12(11)*tmp_r12(11) + &
-                         tmp_r12(12)*tmp_r12(12) &
-                         )
-                   end if
-                   if ( min > crit(ii_c,ii_phi_c,ii_eta_c) ) then
-                        min = crit(ii_c,ii_phi_c,ii_eta_c)
-                        kk_s     = kk
-                        kk_phi_s = kk_phi
-                        kk_eta_s = kk_eta
-                   end if
-                   kk = kk + intervall
-            End Do
-            kk_phi = kk_phi + intervall
-        end Do
-        kk_eta = kk_eta + intervall
-     end Do
-
-    !-- After minimising the whole field --> recalc the opt_tin depending on opt angles
-    call transpose_mat (EE, kk_s, kk_phi_s, kk_eta_s, opt_tin,BB)
+END SUBROUTINE opt_stiff
 
 
+!------------------------------------------------------------------------------
+! FUNCTION: DoAM
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief:
+!> Degree of anisotropy - monotropic
+!
+!> @param[in] mat 2nd rank R6x6 tensor
+!> @return[out] res Result
+!------------------------------------------------------------------------------
+FUNCTION DoAM(mat) RESULT(res)
+    REAL(KIND=rk), DIMENSION(6,6), INTENT(in) :: mat
+    REAL(KIND=rk) :: res
 
-
-    if ( outp .eqv. .TRUE. ) then
-       write(*,'(A,F6.1,A,F10.1,A,F8.1,A,A,F10.1)',advance='YES')"alpha: ",kk_s,"      phi: ",kk_phi_s,&
-            & "         eta: ",kk_eta_s, "        Min ",trim(opt_str),min
-    end if
-
-    if (present(a)) a = kk_s
-    if (present(p)) p = kk_phi_s
-    if (present(e)) e = kk_eta_s
-
-end subroutine opt_eff_stiff_r812
-
-subroutine transpose_mat (EE, kk, kk_phi, kk_eta, tmp_r6x6,BB)
-
-    real(kind=rk), intent(in)                                  :: kk,   kk_phi,   kk_eta
-    real(kind=rk), dimension(6,6), intent(in)                  :: EE                     ! tin to opimise
-    real(kind=rk), dimension(6,6), intent(out)                 :: tmp_r6x6
-    real(kind=rk), dimension(6,6), intent(out),optional        :: BB
-    real(kind=rk)                                              :: alpha, phi, eta
-    real(kind=rk), dimension(3)                                :: n
-    real(kind=rk), dimension(3,3)                              :: aa
-
-    !-- Degrees as input, radian as output to sin/cos
-    alpha = Real(kk)     * pi / 180._rk
-    phi   = Real(kk_phi) * pi / 180._rk
-    eta   = Real(kk_eta) * pi / 180._rk
-
-    n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ]
-    n = n / sqrt(sum(n*n))
-
-    aa = rot_alg(n,alpha)
-
-    BB = tra_R6(aa)
-
-    tmp_r6x6 = matmul(matmul(transpose(BB),EE),BB)
-end subroutine transpose_mat
-
-Subroutine mono_crit (EE,res)
-    real(kind=rk), dimension(6,6), intent(in)         :: EE
-    real(kind=rk), intent (out)                       :: res
-
-    !-- Square based method
-    res = sum(EE(1:4,5:6)*EE(1:4,5:6))
-end subroutine mono_crit
-
-subroutine ortho_crit (EE,res)
-    real(kind=rk), dimension(6,6), intent(in)         :: EE
-    real(kind=rk), intent (out)                       :: res
-
-    !-- Square based method
-    res = ( sum(EE(1:3,4:6) * EE(1:3,4:6)) + &
-            sum(EE( 4 ,5:6) * EE( 4 ,5:6)) + &
-                EE( 5 , 6 ) * EE( 5 , 6 ))
-end subroutine ortho_crit
-
-
-FUNCTION DoAO(EE) RESULT(OUT)
-  !-- Degree of Orthotropic anisotropy
-  REAL   (kind=rk), DIMENSION(6,6), INTENT(in) :: EE
-  REAL   (kind=rk)                             :: OUT
-  !-- Degree of Anisotropy - average 0 divided by average non-zero entry
-  OUT = ((     ABS(EE(1,4)) +    ABS(EE(1,5)) +    ABS(EE(1,6)) &
-          +    ABS(EE(2,4)) +    ABS(EE(2,5)) +    ABS(EE(2,6)) &
-          +    ABS(EE(3,4)) +    ABS(EE(3,5)) +    ABS(EE(3,6)) &
-                            +    ABS(EE(4,5)) +    ABS(EE(4,6)) &
-                                              +    ABS(EE(5,6)) )/12.0_rk ) / &
-        ((     ABS(EE(1,1)) +  2*ABS(EE(1,2)) +  2*ABS(EE(1,3)) &
-                            +    ABS(EE(2,2)) +  2*ABS(EE(2,3)) &
-                                              +    ABS(EE(3,3)) &
-          +    ABS(EE(4,4)) +    ABS(EE(5,5)) +    ABS(EE(6,6)) )/12.0_rk)*100.0_rk
-END FUNCTION DoAO
-
-FUNCTION DoAM(EE) RESULT(OUT)
-    !-- Degree of Orthotropic anisotropy
-    REAL   (kind=rk), DIMENSION(6,6), INTENT(in) :: EE
-    REAL   (kind=rk)                             :: OUT
+    !------------------------------------------------------------------------------
     !-- Degree of Anisotropy - average 0 divided by average non-zero entry
-    OUT = (( +    ABS(EE(1,5)) +    ABS(EE(1,6)) &
-             +    ABS(EE(2,5)) +    ABS(EE(2,6)) &
-             +    ABS(EE(3,5)) +    ABS(EE(3,6)) &
-             +    ABS(EE(4,5)) +    ABS(EE(4,6)) )/8.0_rk ) / &
-         ((       ABS(EE(1,1)) + 2* ABS(EE(1,2)) + 2* ABS(EE(1,3)) + 2* ABS(EE(1,4)) &
-                               +    ABS(EE(2,2)) + 2* ABS(EE(2,3)) + 2* ABS(EE(2,4)) &
-                                                 +    ABS(EE(3,3)) + 2* ABS(EE(3,4)) &
-                                                                   +    ABS(EE(4,4)) &
-                                                                   +    ABS(EE(5,5)) + 2* ABS(EE(5,6)) &
-                                                                   +    ABS(EE(6,6)))/20.0_rk)*100.0_rk
-END FUNCTION DoAM
+    !------------------------------------------------------------------------------
+    res= (( + ABS(mat(1,5)) +    ABS(mat(1,6)) &
+            + ABS(mat(2,5)) +    ABS(mat(2,6)) &
+            + ABS(mat(3,5)) +    ABS(mat(3,6)) &
+            + ABS(mat(4,5)) +    ABS(mat(4,6)) )/8.0_rk ) / &
+            ((ABS(mat(1,1)) + 2* ABS(mat(1,2)) + 2* ABS(mat(1,3)) + 2* ABS(mat(1,4)) &
+            + ABS(mat(2,2)) + 2* ABS(mat(2,3)) + 2* ABS(mat(2,4)) &
+            + ABS(mat(3,3)) + 2* ABS(mat(3,4)) &
+            + ABS(mat(4,4)) &
+            + ABS(mat(5,5)) + 2* ABS(mat(5,6)) &
+            + ABS(mat(6,6)))/20.0_rk)*100.0_rk
+END FUNCTION DoAM          
+
+!------------------------------------------------------------------------------
+! FUNCTION: DoAO
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief:
+!> Degree of anisotropy - orthotropic
+!
+!> @param[in] mat 2nd rank R6x6 tensor
+!> @return[out] res Result
+!------------------------------------------------------------------------------
+FUNCTION DoAO(mat) RESULT(res)
+    REAL(KIND=rk), DIMENSION(6,6), INTENT(in) :: mat
+    REAL(KIND=rk) :: res
+
+    !------------------------------------------------------------------------------
+    !-- Degree of Anisotropy - average 0 divided by average non-zero entry
+    !------------------------------------------------------------------------------
+    res=(( ABS(mat(1,4)) + ABS(mat(1,5)) + ABS(mat(1,6)) &
+        + ABS(mat(2,4)) + ABS(mat(2,5)) + ABS(mat(2,6)) &
+        + ABS(mat(3,4)) + ABS(mat(3,5)) + ABS(mat(3,6)) &
+        + ABS(mat(4,5)) + ABS(mat(4,6)) &
+        + ABS(mat(5,6)) )/12.0_rk ) / &
+        ((ABS(mat(1,1)) +  2*ABS(mat(1,2)) +  2*ABS(mat(1,3)) &
+        + ABS(mat(2,2)) +  2*ABS(mat(2,3)) &
+        + ABS(mat(3,3)) &
+        + ABS(mat(4,4)) + ABS(mat(5,5)) + ABS(mat(6,6)) )/12.0_rk)*100.0_rk
+END FUNCTION DoAO
 
 !------------------------------------------------------------------------------
 ! SUBROUTINE: tilt_tin
@@ -560,46 +244,46 @@ END FUNCTION DoAM
 !> other angles are not implemented. Changes S11, S22 and S33 to get 
 !> an S11 > S22 > S33 ordering.
 !
-!> @param[in] tin Input tensor 
-!> @param[in] tout Output tensor
+!> @param[in] inte Input tensor 
+!> @param[out] outt Output tensor
 !------------------------------------------------------------------------------  
-SUBROUTINE tilt_tin(tin, tout)
+SUBROUTINE tilt_tin(inte, outt)
 
-  REAL(KIND=rk), DIMENSION(6,6), INTENT(IN)  :: tin
-  REAL(KIND=rk), DIMENSION(6,6), INTENT(OUT) :: tout
+REAL(KIND=rk), DIMENSION(6,6), INTENT(IN)  :: inte ! input tensor
+REAL(KIND=rk), DIMENSION(6,6), INTENT(OUT) :: outt ! output tensor
 
-  INTEGER(KIND=ik) :: axis
-  REAL(KIND=rk), DIMENSION(6,6) :: BB1, BB2, BB3, tmp6x6
-  REAL(KIND=rk), DIMENSION(3)   :: n1, n2, n3
-  REAL(KIND=rk), DIMENSION(3,3) :: aa1, aa2, aa3
+INTEGER(KIND=ik) :: axis
+REAL(KIND=rk), DIMENSION(6,6) :: BB1, BB2, BB3, tmp6x6
+REAL(KIND=rk), DIMENSION(3)   :: n1, n2, n3
+REAL(KIND=rk), DIMENSION(3,3) :: aa1, aa2, aa3
 
-  n1 = [1,0,0]
-  n2 = [0,1,0]
-  n3 = [0,0,1]
-  aa1 = rot_alg(n1,alpha)
-  aa2 = rot_alg(n2,alpha)
-  aa3 = rot_alg(n3,alpha)
-  BB1 = tra_R6 (aa1)
-  BB2 = tra_R6 (aa2)
-  BB3 = tra_R6 (aa3)
+n1 = [1,0,0]
+n2 = [0,1,0]
+n3 = [0,0,1]
+aa1 = rot_alg (n1,alpha)
+aa2 = rot_alg (n2,alpha)
+aa3 = rot_alg (n3,alpha)
+BB1 = tra_R6 (aa1)
+BB2 = tra_R6 (aa2)
+BB3 = tra_R6 (aa3)
 
-  IF((tin_in(1,1)>tin(2,2)) .AND. (tin(1,1)>tin(3,3)) .AND. (tin(2,2)>tin(3,3))) THEN
-     tout = tin !-- 123
-  ELSE IF((tin(1,1)>tin(2,2)) .AND. (tin(1,1)>tin(3,3)) .AND. (tin(2,2)<tin(3,3))) THEN
-     tout  = MATMUL(MATMUL(TRANSPOSE(BB1),tin),BB1) !-- 132 => 123
-  ELSE IF((tin(1,1)<tin(2,2)) .AND. (tin(1,1)<tin(3,3)) .AND. (tin(2,2)>tin(3,3))) THEN
-     tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB3),tin),BB3) !-- 231 => 132
-          
-     tout  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
-  ELSE IF((tin(1,1)<tin(2,2)) .AND. (tin(1,1)>tin(3,3)) .AND. (tin(2,2)>tin(3,3))) THEN
-     tout  = MATMUL(MATMUL(TRANSPOSE(BB3),tin),BB3) !-- 213 => 123
-  ELSE IF((tin(1,1)>tin(2,2)) .AND. (tin(1,1)<tin(3,3)) .AND. (tin(2,2)<tin(3,3))) THEN
-     tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB2),tin),BB2) !-- 312 => 132
-          
-     tout  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
-  ELSE IF((tin(1,1)<tin(2,2)) .AND. (tin(1,1)<tin(3,3)) .AND. (tin(2,2)<tin(3,3))) THEN
-     tout  = MATMUL(MATMUL(TRANSPOSE(BB2),tin),BB2) !-- 321 => 123
-  END IF
+    IF((inte(1,1)>inte(2,2)) .AND. (inte(1,1)>inte(3,3)) .AND. (inte(2,2)>inte(3,3))) THEN
+    outt = inte !-- 123
+ELSE IF((inte(1,1)>inte(2,2)) .AND. (inte(1,1)>inte(3,3)) .AND. (inte(2,2)<inte(3,3))) THEN
+    outt  = MATMUL(MATMUL(TRANSPOSE(BB1),inte),BB1) !-- 132 => 123
+ELSE IF((inte(1,1)<inte(2,2)) .AND. (inte(1,1)<inte(3,3)) .AND. (inte(2,2)>inte(3,3))) THEN
+    tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB3),inte),BB3) !-- 231 => 132
+        
+    outt  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
+ELSE IF((inte(1,1)<inte(2,2)) .AND. (inte(1,1)>inte(3,3)) .AND. (inte(2,2)>inte(3,3))) THEN
+    outt  = MATMUL(MATMUL(TRANSPOSE(BB3),inte),BB3) !-- 213 => 123
+ELSE IF((inte(1,1)>inte(2,2)) .AND. (inte(1,1)<inte(3,3)) .AND. (inte(2,2)<inte(3,3))) THEN
+    tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB2),inte),BB2) !-- 312 => 132
+        
+    outt  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
+ELSE IF((inte(1,1)<inte(2,2)) .AND. (inte(1,1)<inte(3,3)) .AND. (inte(2,2)<inte(3,3))) THEN
+    outt  = MATMUL(MATMUL(TRANSPOSE(BB2),tin),BB2) !-- 321 => 123
+END IF
 
 END SUBROUTINE tilt_tin
 
