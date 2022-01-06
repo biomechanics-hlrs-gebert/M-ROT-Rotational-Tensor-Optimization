@@ -49,16 +49,16 @@ SUBROUTINE opt_stiff(mode)
 
 CHARACTER(LEN=*), INTENT(IN) :: mode
 
-INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps, counter
+INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps
+INTEGER(KIND=ik) :: ii, jj, kk
 
 REAL(KIND=rk) :: min, alpha, eta, phi
-REAL(KIND=rk), DIMENSION(6,6) :: tmp_r6x6
+REAL(KIND=rk), DIMENSION(6,6) :: tmp_r6x6, mask
 
 !----------------------------------------------------------------------------------------------
 ! Initialize variables
 !----------------------------------------------------------------------------------------------
 ttl_steps = 0_ik
-counter = 0_ik
 mask = 0_ik
 min = 10E09_ik
 
@@ -87,7 +87,7 @@ SELECT CASE(TRIM(ADJUSTL(mode)))
     ! The matrix mask needs no recurring initialization, as the values mustn't change during 
     ! optimization (program runtime in general).
     !----------------------------------------------------------------------------------------------
-    mask(1:4,5:6) = 2_ik  
+    mask(1:4,5:6) = 2_ik
 
 CASE('orthotropic')
     ! Explanation @ opt_stiff_mono
@@ -122,7 +122,12 @@ END SELECT
 ! @MPI: With mpi, crit may have a different state across the ranks!
 !----------------------------------------------------------------------------------------------
 IF(ALLOCATED(crit)) THEN
-    IF(SHAPE(crit) /= ttl_steps) DEALLOCATE(crit)
+    IF((SIZE(crit, DIM=1) /= ttl_steps(1)) .OR. &
+       (SIZE(crit, DIM=2) /= ttl_steps(2)) .OR. &
+       (SIZE(crit, DIM=3) /= ttl_steps(3))) THEN
+
+        DEALLOCATE(crit)
+    END IF
 END IF
 
 IF(.NOT. ALLOCATED(crit)) THEN
@@ -130,30 +135,30 @@ IF(.NOT. ALLOCATED(crit)) THEN
 END IF
 
 alpha = dig(1) - (intervall(1) * pm_steps(1))
-DO counter(1) = 1_ik, ttl_steps(1)
+DO kk = 1_ik, ttl_steps(1)
 
     eta = dig(2) - (intervall(2) * pm_steps(2))
-    DO counter(2) = 1_ik, ttl_steps(2)
+    DO jj = 1_ik, ttl_steps(2)
 
         phi = dig(3) - (intervall(3) * pm_steps(3))
-        DO counter(3) = 1_ik, ttl_steps(3)
+        DO ii = 1_ik, ttl_steps(3)
 
-            CALL transpose_mat (tin%mat, alpha, eta, phi, tmp_r6x6)
+            CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , tmp_r6x6)
 
             !-------------------------------------------------------------------------------
             ! Criteria: Entries that are not zero after multiplication with mask are 
             ! squared and summed up. Integer power (**2) is quicker than real power (**2.0).
             ! https://twitter.com/fortrantip/status/1478765410405298176?s=24
             !-------------------------------------------------------------------------------
-            crit(counter(1), counter(2), counter(3)) = SUM((tmp_r6x6 * mask)**2_ik)  
+            crit(kk, jj, ii) = SUM((tmp_r6x6 * mask)**2_ik)  
 
             !-------------------------------------------------------------------------------
             ! Update the best position of the output matrix if the criteria is below the 
             ! current minimum.
             !-------------------------------------------------------------------------------
-            IF ( min > crit(counter(1), counter(2), counter(3))) THEN
+            IF ( min > crit(kk, jj, ii)) THEN
 
-                min = crit(counter(1), counter(2), counter(3))
+                min = crit(kk, jj, ii)
 
                 tout%pos = [ alpha, eta, phi ]
             END IF
@@ -235,7 +240,7 @@ FUNCTION DoAO(mat) RESULT(res)
 END FUNCTION DoAO
 
 !------------------------------------------------------------------------------
-! SUBROUTINE: tilt_tin
+! SUBROUTINE: tilt_tensor
 !------------------------------------------------------------------------------  
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !
@@ -244,15 +249,12 @@ END FUNCTION DoAO
 !> other angles are not implemented. Changes S11, S22 and S33 to get 
 !> an S11 > S22 > S33 ordering.
 !
-!> @param[in] inte Input tensor 
-!> @param[out] outt Output tensor
+!> @param[in] mat Input tensor 
 !------------------------------------------------------------------------------  
-SUBROUTINE tilt_tin(inte, outt)
+SUBROUTINE tilt_tensor(mat)
 
-REAL(KIND=rk), DIMENSION(6,6), INTENT(IN)  :: inte ! input tensor
-REAL(KIND=rk), DIMENSION(6,6), INTENT(OUT) :: outt ! output tensor
+REAL(KIND=rk), DIMENSION(6,6), INTENT(INOUT)  :: mat ! input tensor
 
-INTEGER(KIND=ik) :: axis
 REAL(KIND=rk), DIMENSION(6,6) :: BB1, BB2, BB3, tmp6x6
 REAL(KIND=rk), DIMENSION(3)   :: n1, n2, n3
 REAL(KIND=rk), DIMENSION(3,3) :: aa1, aa2, aa3
@@ -260,31 +262,31 @@ REAL(KIND=rk), DIMENSION(3,3) :: aa1, aa2, aa3
 n1 = [1,0,0]
 n2 = [0,1,0]
 n3 = [0,0,1]
-aa1 = rot_alg (n1,alpha)
-aa2 = rot_alg (n2,alpha)
-aa3 = rot_alg (n3,alpha)
+aa1 = rot_alg (n1, pihalf)
+aa2 = rot_alg (n2, pihalf)
+aa3 = rot_alg (n3, pihalf)
 BB1 = tra_R6 (aa1)
 BB2 = tra_R6 (aa2)
 BB3 = tra_R6 (aa3)
 
-    IF((inte(1,1)>inte(2,2)) .AND. (inte(1,1)>inte(3,3)) .AND. (inte(2,2)>inte(3,3))) THEN
-    outt = inte !-- 123
-ELSE IF((inte(1,1)>inte(2,2)) .AND. (inte(1,1)>inte(3,3)) .AND. (inte(2,2)<inte(3,3))) THEN
-    outt  = MATMUL(MATMUL(TRANSPOSE(BB1),inte),BB1) !-- 132 => 123
-ELSE IF((inte(1,1)<inte(2,2)) .AND. (inte(1,1)<inte(3,3)) .AND. (inte(2,2)>inte(3,3))) THEN
-    tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB3),inte),BB3) !-- 231 => 132
+     IF((mat(1,1)>mat(2,2)) .AND. (mat(1,1)>mat(3,3)) .AND. (mat(2,2)>mat(3,3))) THEN
+    mat = mat !-- 123
+ELSE IF((mat(1,1)>mat(2,2)) .AND. (mat(1,1)>mat(3,3)) .AND. (mat(2,2)<mat(3,3))) THEN
+    mat  = MATMUL(MATMUL(TRANSPOSE(BB1),mat),BB1) !-- 132 => 123
+ELSE IF((mat(1,1)<mat(2,2)) .AND. (mat(1,1)<mat(3,3)) .AND. (mat(2,2)>mat(3,3))) THEN
+    tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB3),mat),BB3) !-- 231 => 132
         
-    outt  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
-ELSE IF((inte(1,1)<inte(2,2)) .AND. (inte(1,1)>inte(3,3)) .AND. (inte(2,2)>inte(3,3))) THEN
-    outt  = MATMUL(MATMUL(TRANSPOSE(BB3),inte),BB3) !-- 213 => 123
-ELSE IF((inte(1,1)>inte(2,2)) .AND. (inte(1,1)<inte(3,3)) .AND. (inte(2,2)<inte(3,3))) THEN
-    tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB2),inte),BB2) !-- 312 => 132
+    mat  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
+ELSE IF((mat(1,1)<mat(2,2)) .AND. (mat(1,1)>mat(3,3)) .AND. (mat(2,2)>mat(3,3))) THEN
+    mat  = MATMUL(MATMUL(TRANSPOSE(BB3),mat),BB3) !-- 213 => 123
+ELSE IF((mat(1,1)>mat(2,2)) .AND. (mat(1,1)<mat(3,3)) .AND. (mat(2,2)<mat(3,3))) THEN
+    tmp6x6 = MATMUL(MATMUL(TRANSPOSE(BB2),mat),BB2) !-- 312 => 132
         
-    outt  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
-ELSE IF((inte(1,1)<inte(2,2)) .AND. (inte(1,1)<inte(3,3)) .AND. (inte(2,2)<inte(3,3))) THEN
-    outt  = MATMUL(MATMUL(TRANSPOSE(BB2),tin),BB2) !-- 321 => 123
+    mat  = MATMUL(MATMUL(TRANSPOSE(BB1),tmp6x6),BB1) !-- 132 => 123
+ELSE IF((mat(1,1)<mat(2,2)) .AND. (mat(1,1)<mat(3,3)) .AND. (mat(2,2)<mat(3,3))) THEN
+    mat  = MATMUL(MATMUL(TRANSPOSE(BB2),mat),BB2) !-- 321 => 123
 END IF
 
-END SUBROUTINE tilt_tin
+END SUBROUTINE tilt_tensor
 
 END MODULE opt_stiffness

@@ -431,9 +431,9 @@ CHARACTER(LEN=*), INTENT(IN) :: suf
 
 CHARACTER(LEN=meta_mcl) :: temp_f_suf, perm_f_suf
 INTEGER  (KIND=meta_ik) :: ios
-LOGICAL :: opened, fex
+LOGICAL :: op, fex
 
-opened = .FALSE.
+op = .FALSE.
 fex = .FALSE.
 
 temp_f_suf = TRIM(out%path)//'.temporary'//TRIM(suf)
@@ -477,6 +477,10 @@ SUBROUTINE meta_existing_ascii(fh, suf, amnt_lines)
 INTEGER(KIND=meta_ik), INTENT(IN) :: fh
 CHARACTER(LEN=*), INTENT(IN) :: suf
 INTEGER(KIND=meta_ik), INTENT(OUT) :: amnt_lines
+
+LOGICAL :: fex
+
+fex = .FALSE.
 
 INQUIRE(FILE = TRIM(in%p_n_bsnm)//TRIM(ADJUSTL(suf)), EXIST=fex)
 

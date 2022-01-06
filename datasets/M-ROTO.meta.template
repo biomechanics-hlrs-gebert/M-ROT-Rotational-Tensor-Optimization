@@ -1,5 +1,5 @@
 
-p ROTATIONAL_TENSOR_OPTIMIZATION
+p ROT_TENSOR_OPT
 r REQUEST_MONO          YES                                            ! YES/NO - turn on / off the optimizations
 r REQUEST_ORTH          YES                                            ! YES/NO - turn on / off the optimizations
 r REQUEST_ANI_1         YES                                            ! YES/NO - turn on / off the optimizations

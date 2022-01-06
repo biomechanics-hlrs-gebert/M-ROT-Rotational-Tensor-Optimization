@@ -114,10 +114,12 @@ main_bin = $(bin_dir)$(bin_name)_$(trgt_vrsn)$(bin_suf)
 f-objects = $(st_obj_dir)mod_global_std$(obj_ext)\
 			$(st_obj_dir)mod_strings$(obj_ext)\
 			$(st_obj_dir)mod_math$(obj_ext)\
+			$(st_obj_dir)mod_mechanical$(obj_ext)\
 			$(st_obj_dir)mod_user_interaction$(obj_ext) \
 			$(st_obj_dir)mod_meta$(obj_ext) \
 			$(st_obj_dir)mod_vtk_raw$(obj_ext)\
 			$(st_obj_dir)mod_formatted_plain$(obj_ext) \
+			$(obj_dir)mod_opt_stiffness$(obj_ext) \
 			$(obj_dir)tensor_optimizer$(obj_ext)
 
 # ------------------------------------------------------------------------------
@@ -130,20 +132,26 @@ st:
 # Begin Building
 all: st $(main_bin)  
 
-
 # ------------------------------------------------------------------------------
 # Module containing convolutional kernels
-$(obj_dir)mod_kernels$(obj_ext):$(st_mod_dir)math$(mod_ext) $(f_src_dir)mod_kernels$(f90_ext)
-	@echo "----- Compiling " $(f_src_dir)mod_kernels$(f90_ext)" -----"
-	$(compiler) $(c_flags_f90) -c $(f_src_dir)mod_kernels$(f90_ext) -o $@
+$(obj_dir)mod_opt_stiffness$(obj_ext):$(st_mod_dir)global_std$(mod_ext) \
+									  $(st_mod_dir)user_interaction$(mod_ext)\
+                                      $(st_mod_dir)mechanical$(mod_ext) \
+                                      $(st_mod_dir)math$(mod_ext) \
+	                                  $(f_src_dir)mod_opt_stiffness$(f90_ext)
+	@echo "----- Compiling " $(f_src_dir)mod_opt_stiffness$(f90_ext)" -----"
+	$(compiler) $(c_flags_f90) -c $(f_src_dir)mod_opt_stiffness$(f90_ext) -o $@
 	@echo
-
 
 # ------------------------------------------------------------------------------
 # Main object 
 $(obj_dir)tensor_optimizer$(obj_ext):$(st_mod_dir)global_std$(mod_ext)\
+									$(st_mod_dir)meta$(mod_ext)\
+									$(st_mod_dir)user_interaction$(mod_ext)\
+									$(st_mod_dir)formatted_plain$(mod_ext)\
 									$(st_mod_dir)vtk_meta_data$(mod_ext)\
- 			            			$(st_mod_dir)strings$(mod_ext)\
+									$(st_mod_dir)raw_binary$(mod_ext)\
+ 			            			$(mod_dir)opt_stiffness$(mod_ext)\
 									$(f_src_dir)tensor_optimizer$(f90_ext)
 	@echo "----- Compiling " $(f_src_dir)tensor_optimizer$(f90_ext) " -----"
 	$(compiler) $(c_flags_f90) -c $(f_src_dir)tensor_optimizer$(f90_ext) -o $@

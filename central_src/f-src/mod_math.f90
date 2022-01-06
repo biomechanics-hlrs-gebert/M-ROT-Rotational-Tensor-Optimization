@@ -16,7 +16,8 @@ IMPLICIT NONE
 
 REAL(KIND=rk), PARAMETER :: num_zero   = 1.E-9
 REAL(KIND=rk), PARAMETER :: sq2        = sqrt(2._rk)
-REAL(KIND=rk), PARAMETER :: pi         = 4.D0*DATAN(1.D0) !acos(-1._rk)
+REAL(KIND=rk), PARAMETER :: pi         = 4.D0*DATAN(1.D0)       !acos(-1._rk)
+REAL(KIND=rk), PARAMETER :: pihalf     = 4.D0*DATAN(1.D0)/2._rk !acos(-1._rk)
 REAL(KIND=rk), PARAMETER :: inv180     = 1._rk/180._rk
 REAL(KIND=rk), PARAMETER :: pi_div_180 = acos(-1._rk)/180._rk
 
@@ -55,6 +56,7 @@ SUBROUTINE transpose_mat (tensor_in, pos_in, tensor_out)
      REAL(KIND=rk)                 :: alpha, phi, eta
      REAL(KIND=rk), DIMENSION(3)   :: n
      REAL(KIND=rk), DIMENSION(3,3) :: aa
+     REAL(KIND=rk), DIMENSION(6,6) :: BB
 
      !------------------------------------------------------------------------------
      !  Degrees as input, radian as output to sin/cos

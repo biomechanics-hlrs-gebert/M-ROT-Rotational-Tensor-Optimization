@@ -525,7 +525,7 @@ END SUBROUTINE ser_write_raw_ik8
 SUBROUTINE ser_write_raw_rk4(fh, filename, array)
 
 INTEGER(KIND=ik), INTENT(IN) :: fh
-INTEGER(KIND=REAL32), DIMENSION(:,:,:), INTENT(IN) :: array
+REAL(KIND=REAL32), DIMENSION(:,:,:), INTENT(IN) :: array
 CHARACTER(len=*), INTENT(IN) :: filename
 
 OPEN (UNIT=fh, FILE=filename, ACCESS="STREAM", FORM="UNFORMATTED", &
@@ -549,7 +549,7 @@ END SUBROUTINE ser_write_raw_rk4
 SUBROUTINE ser_write_raw_rk8(fh, filename, array)
 
 INTEGER(KIND=ik), INTENT(IN) :: fh
-INTEGER(KIND=REAL64), DIMENSION(:,:,:), INTENT(IN) :: array
+REAL(KIND=REAL64), DIMENSION(:,:,:), INTENT(IN) :: array
 CHARACTER(len=*), INTENT(IN) :: filename
 
 OPEN (UNIT=fh, FILE=filename, ACCESS="STREAM", FORM="UNFORMATTED", &

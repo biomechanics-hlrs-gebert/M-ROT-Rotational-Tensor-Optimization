@@ -327,20 +327,7 @@ IF (err > 0) THEN
 END IF
 
 END SUBROUTINE print_err_stop
-
-
-!------------------------------------------------------------------------------
-! FUNCTION: clear_cli
-!------------------------------------------------------------------------------  
-!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
-!
-!> @brief
-!> Clears the command line
-!------------------------------------------------------------------------------
-FUNCTION clear_cli() result()
-    IF(std_out/=6) CALL EXECUTE_COMMAND_LINE('printf "\033c"')
-END FUNCTION clear_cli
-    
+  
 
 !------------------------------------------------------------------------------
 ! SUBROUTINE: estimated_time_of_arrival
