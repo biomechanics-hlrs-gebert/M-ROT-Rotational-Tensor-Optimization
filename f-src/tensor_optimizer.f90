@@ -105,7 +105,7 @@ INTEGER(KIND=ik) :: exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0
 INTEGER(KIND=ik) :: jj, kk, mm, zz
 
 LOGICAL, DIMENSION(4) :: execute_optimization = .FALSE.
-LOGICAL :: stp, print_criteria
+LOGICAL :: stp, print_criteria, dmn_found = .FALSE.
 
 INTEGER(KIND=mik) :: ierr, my_rank, size_mpi, mii
 INTEGER(KIND=mik) :: active, feed_ranks, crs, crs_counter
@@ -227,13 +227,13 @@ IF(my_rank == 0) THEN
     ! Create/Open tensor files. Basically tuned csv data.
     !------------------------------------------------------------------------------
     fh_covo = give_new_unit()
-    suf_covo = ".tcr.covo" ! control volume (in situ orientation)
+    suf_covo = ".stte.covo" ! control volume (in situ orientation)
     CALL meta_existing_ascii(fh_covo, suf_covo, covo_amnt_lines)
 
     crs = 0_mik
     IF(TRIM(re_mono) == "YES") THEN
         fh_mono = give_new_unit()
-        suf_mono = ".tcr.mono" ! monotropic optimization 
+        suf_mono = ".stte.mono" ! monotropic optimization 
         CALL meta_start_ascii(fh_mono, suf_mono) 
         execute_optimization(1) = .TRUE. 
         crs=crs+1_mik
@@ -241,7 +241,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_orth) == "YES") THEN
         fh_orth = give_new_unit()
-        suf_orth = ".tcr.orth" ! orthotropic optimization 
+        suf_orth = ".stte.orth" ! orthotropic optimization 
         CALL meta_start_ascii(fh_orth, suf_orth) 
         execute_optimization(2) = .TRUE. 
         crs=crs+1_mik
@@ -249,7 +249,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_ani1) == "YES") THEN
         fh_ani1 = give_new_unit()
-        suf_ani1 = ".tcr.an1" ! anisotropic optimization, version 1 
+        suf_ani1 = ".stte.an1" ! anisotropic optimization, version 1 
         CALL meta_start_ascii(fh_ani1, suf_ani1) 
         execute_optimization(3) = .TRUE. 
         crs=crs+1_mik
@@ -257,7 +257,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_ani2) == "YES") THEN
         fh_ani2 = give_new_unit()
-        suf_ani2 = ".tcr.an2" ! anisotropic optimization, version 2 
+        suf_ani2 = ".stte.an2" ! anisotropic optimization, version 2 
         CALL meta_start_ascii(fh_ani2, suf_ani2) 
         execute_optimization(4) = .TRUE. 
         crs=crs+1_mik
@@ -338,6 +338,13 @@ IF (my_rank==0) THEN
     ! @Struct process -> 1 nn can have multiple processes
     !------------------------------------------------------------------------------
     DO WHILE (mii <= covo_amnt_lines-1_ik)
+
+        !------------------------------------------------------------------------------
+        ! Track whether the domain requested is contained in the input data.
+        !------------------------------------------------------------------------------
+        IF(exp_dmn_crit > 0_ik) THEN
+            IF(tglbl_in(mii)%dmn == exp_dmn_crit) dmn_found = .TRUE.
+        END IF
 
         !------------------------------------------------------------------------------
         ! Check whether it is a zero tensor:
@@ -518,7 +525,7 @@ ELSE
             tlcl_res(crs_counter) = tout
 
             CALL write_criteria_space_to_vtk(&
-                out%p_n_bsnm//".tcr."//dmn_no//"."//TRIM(temp_suf)//"."//vtk_suf)
+                out%p_n_bsnm//".stte."//dmn_no//"."//TRIM(temp_suf)//"."//vtk_suf)
 
             crs_counter = crs_counter + 1_mik
 
@@ -606,13 +613,20 @@ IF(my_rank == 0) THEN
 
     CALL CPU_TIME(end)
 
-    WRITE(std_out,FMT_MSG_SEP)
+    WRITE(std_out,FMT_TXT_SEP)
     WRITE(std_out,FMT_TXT_AF0A) 'Overall Time = ', (end-start) / 60._rk ,' Minutes'
     WRITE(std_out,FMT_TXT_AF0A) 'CPU time = ', (end-start) / 60._rk / 60._rk * size_mpi,' Hours'
-    WRITE(std_out,FMT_MSG_SEP)
+    WRITE(std_out,FMT_TXT_SEP)
 
-    WRITE(std_out,FMT_TXT_AF0A) 'Program finished successfully.'
-    WRITE(std_out,FMT_MSG_SEP)
+    IF(.NOT. dmn_found) THEN
+        WRITE(std_out,FMT_TXT_A3I0) "Following domain number optimization criteria export was &
+            &requested, but no stiffness tensor with a corresponding domain number was not &
+            &found: Domain ", exp_dmn_crit
+        WRITE(std_out,FMT_TXT) ""      
+    END IF
+
+    WRITE(std_out,FMT_TXT_AF0A) 'Program finished.'
+    WRITE(std_out,FMT_TXT_SEP)
 
 END IF ! (my_rank == 0)
 

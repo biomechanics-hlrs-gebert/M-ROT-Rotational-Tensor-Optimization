@@ -1,0 +1,74 @@
+# HLRS|NUM Dataset Batch Record
+
+* GENERAL_INFORMATION
+* CT_SCAN               FH01s3                                         ! HLRS internal nomenclature
+* OWNER                 Johannes_Gebert
+* OWNER_CONTACT         gebert@hlrs.de
+* DATE_CREATED          04.09.2021                                   
+* INTERNAL_ID           Testszenario                                   ! Briefly encode what was studied
+
+* HISTORY               1                                              ! Number of consecutive images within binary data
+* TYPE_RAW              ik4                                            ! Data type of the binary image
+* DATA_BYTE_ORDER       LittleEndian                                   ! BigEndian, LittleEndian
+* DIMENSIONALITY        3                                              ! Dimensions within the image
+* DIMENSIONS            21 21 21                                       ! (Voxels)
+* NO_SCALAR_CMPNNTS     1                                              ! Number of components per scalar (paraview requirement)
+* SPACING               1.000000       1.000000       1.000000         ! (mm)
+* ORIGIN_SHIFT_GLBL     0.0            0.0            0.0              ! (mm)
+* ORIGIN                0              0              0                ! (-)
+* FIELD_OF_VIEW         21.0           21.0           21.0             ! (mm)
+* ENTRIES               9261                                           ! Typically the amount of voxels
+
+----------------------------------------------------------------------------------------------------------------
+r BINARIZE_LO           0                                              ! Typically 0 or 1
+----------------------------------------------------------------------------------------------------------------
+
+p TENSOR-COMPUTATION
+r SIZE_DOMAIN           2.0  2.0  2.0                                  ! (mm)
+r YOUNG_MODULUS         5600.0                                         ! Monolithical parameter
+r POISSON_RATIO         0.3                                            ! Monolithical parameter
+r RVE_STRAIN            0.000001                                       ! Strain on macro element
+r MACRO_ELMNT_ORDER     1                                              ! 1=linear (HEX08), 2=quadratic (HEX20)
+r MICRO_ELMNT_TYPE      HEX08                                          ! Element type  on micro scale
+r MESH_PER_SUB_DMN      2                                              ! Processors/Mesh parts per subdomain. Size_mpi-1! 
+r OUT_FMT               FMPS                                           ! Output Format
+r LO_BNDS_DMN_RANGE     0    0    0                                    ! xa_n - Lower bounds of selected domain range
+r UP_BNDS_DMN_RANGE     0    0    0                                    ! xe_n - Upper bounds of selected domain range
+r RESTART               N                                              ! Restart a (partly) computed project
+
+r NEW_BSNM_FEATURE      Tensors                                        ! Last segment of basename - NO '_'
+r NEW_BSNM_PURPOSE      Pro                                            ! 3rd segment of basename - NO '_'
+
+w MICRO_ELMNT_TYPE      HEX08                                          04.01.2022 15:01:23.503 +0100
+w DBG_LVL               DEBUG                                          04.01.2022 15:01:23.503 +0100
+w OUT_FMT               FMPS                                           04.01.2022 15:01:23.503 +0100
+w RESTART               N                                              04.01.2022 15:01:23.503 +0100
+w SIZE_DOMAIN           2.0000000    2.0000000    2.0000000    (mm)    04.01.2022 15:01:23.504 +0100
+w SPACING               1.0000000    1.0000000    1.0000000    (mm)    04.01.2022 15:01:23.504 +0100
+w DIMENSIONS            21           21           21           (-)     04.01.2022 15:01:23.504 +0100
+w LO_BNDS_DMN_RANGE     0            0            0            (-)     04.01.2022 15:01:23.504 +0100
+w UP_BNDS_DMN_RANGE     0            0            0            (-)     04.01.2022 15:01:23.504 +0100
+w BINARIZE_LO           0                                      (-)     04.01.2022 15:01:23.504 +0100
+w MESH_PER_SUB_DMN      2                                      (-)     04.01.2022 15:01:23.504 +0100
+w RVE_STRAIN            0.000001                               (mm)    04.01.2022 15:01:23.504 +0100
+w YOUNG_MODULUS         5600.0                                 (MPa)   04.01.2022 15:01:23.504 +0100
+w POISSON_RATIO         0.3                                    (-)     04.01.2022 15:01:23.504 +0100
+w MACRO_ELMNT_ORDER     1                                      (-)     04.01.2022 15:01:23.504 +0100
+
+w PROGRAM_VERSION                                                      04.01.2022 15:01:24.938 +0100
+w PROGRAM_GIT_HASH      40cb58fe5d1b066904e8421084c11770383fe041       04.01.2022 15:01:24.938 +0100
+w SHA256SUM_OF_BINARY   063d7528cb8359fb7aa47a016bf3d8efabd96e42517d4e60a95963d7c8b7a97f
+w COMPUTATION_FINISHED  Succesfully                                    04.01.2022 15:01:25.022 +0100
+
+----------------------------------------------------------------------------------------------------
+
+p ROT_TENSOR_OPT
+r REQUEST_MONO          YES                                            ! YES/NO - turn on / off the optimizations
+r REQUEST_ORTH          YES                                            ! YES/NO - turn on / off the optimizations
+r REQUEST_ANI_1         YES                                            ! YES/NO - turn on / off the optimizations
+r REQUEST_ANI_2         YES                                            ! YES/NO - turn on / off the optimizations
+r EXPORT_DMN_CRIT       800                                            ! Criteria space as vtk. No pos=dmn No neg=all 
+r RESTART               N                                              ! Restart a (partly) computed project
+
+r NEW_BSNM_FEATURE      RotOpt                                         ! Last segment of basename - NO '_'
+r NEW_BSNM_PURPOSE      Dev                                            ! 3rd segment of basename - NO '_'
