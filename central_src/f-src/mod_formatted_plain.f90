@@ -479,7 +479,7 @@ IF(ntokens /= 43_ik) invalid = .TRUE.
 ! Required, even if row is invalid. Does not check whether tokens(1) actually
 ! is an integer/domain number.
 !------------------------------------------------------------------------------
-READ(tensor_of_row%dmn, '(I20)') tokens(1)
+READ(tokens(1), '(I20)') tensor_of_row%dmn 
 
 IF(invalid) THEN   
     tensor_of_row%dmn        = -tensor_of_row%dmn

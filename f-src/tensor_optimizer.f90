@@ -185,7 +185,7 @@ IF(my_rank == 0) THEN
     ! Check and open the input file; Modify the Meta-Filename / Basename
     ! Define the new application name first
     !------------------------------------------------------------------------------
-    global_meta_prgrm_mstr_app = 'ROTO' 
+    global_meta_prgrm_mstr_app = 'roto' 
     global_meta_program_keyword = 'ROT_TENSOR_OPT'
     CALL meta_append(m_rry)
 
@@ -279,7 +279,6 @@ IF(my_rank == 0) THEN
     END IF
 
     IF(debug >= 0) THEN
-        WRITE(std_out, FMT_TXT_SEP)
         WRITE(std_out, FMT_MSG_AI0) "Debug Level:", debug
         WRITE(std_out, FMT_MSG_AI0) "Processors:", size_mpi  
         WRITE(std_out, FMT_MSG_AI0) "Amount of domains:", covo_amnt_lines-1_ik
@@ -324,6 +323,11 @@ statuses_mpi=0_mik
 ! Rank 0 -- Process master - Start working process
 !------------------------------------------------------------------------------
 IF (my_rank==0) THEN
+
+    IF(debug >= 0) THEN
+        WRITE(std_out, FMT_MSG) "Starting worker supply."
+        FLUSH(std_out)
+    END IF
 
     mii = 1_mik
     feed_ranks = 1_mik 
