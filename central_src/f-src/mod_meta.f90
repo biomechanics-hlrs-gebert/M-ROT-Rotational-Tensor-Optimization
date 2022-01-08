@@ -127,7 +127,7 @@ IF (restart_cmdarg /= 'U') THEN
 
    mssg=TRIM(mssg)//"restart"
    WRITE(std_out, FMT_WRN) TRIM(mssg)
-   WRITE(std_out, FMT_WRN_SEP)
+   WRITE(std_out, FMT_SEP)
 END IF
 
 !------------------------------------------------------------------------------
@@ -454,6 +454,20 @@ IF(fex) THEN
       mssg='Can not rename the suffix_file from »'//TRIM(temp_f_suf)//'« to the proper basename.'
       CALL print_err_stop(std_out, mssg, 0)
    END IF
+ELSE
+   !------------------------------------------------------------------------------
+   ! In case of an existing ascii file, the in%p_n_bsnm is relevant.
+   !------------------------------------------------------------------------------
+   INQUIRE(FILE = TRIM(in%p_n_bsnm)//TRIM(suf), EXIST=fex)
+   
+   CALL execute_command_line ('cp '//TRIM(in%p_n_bsnm)//TRIM(suf)//' '&
+      //TRIM(out%p_n_bsnm)//TRIM(suf), CMDSTAT=ios)
+
+   IF(ios /= 0_meta_ik) THEN
+      mssg='Can not copy the suffix_file from »'//TRIM(temp_f_suf)//'« to the proper basename.'
+      CALL print_err_stop(std_out, mssg, 0)
+   END IF
+
 END IF
 
 END SUBROUTINE meta_stop_ascii
@@ -467,6 +481,9 @@ END SUBROUTINE meta_stop_ascii
 !> @brief
 !> Subroutine to check and open ascii files which must exist, for example to
 !> read input data.
+!
+!> @description
+!> Stop the file with meta_stop_ascii
 !
 !> @param[in] fh File handle of the input
 !> @param[in] suf Suffix of the file

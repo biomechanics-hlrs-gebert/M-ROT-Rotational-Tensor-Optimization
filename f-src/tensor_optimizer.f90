@@ -57,6 +57,35 @@ SUBROUTINE write_criteria_space_to_vtk(file)
 
 END SUBROUTINE write_criteria_space_to_vtk
 
+!------------------------------------------------------------------------------
+! FUNCTION: stop_workers
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief
+!> Stop all processs gracefully.
+!
+!> @param[in] size_mpi Amount of processes 
+!> @return stat Status
+!------------------------------------------------------------------------------  
+FUNCTION stop_workers(size_mpi) RESULT (ierr)
+
+    INTEGER(KIND=mik), INTENT(IN) :: size_mpi
+
+    INTEGER(KIND=mik) :: ierr, zz
+
+    !------------------------------------------------------------------------------
+    ! Stop workers properly by sending an activity = -1 info
+    !------------------------------------------------------------------------------
+    DO zz = 1, size_mpi-1_mik
+        CALL MPI_SEND(-1_mik, 1_mik, MPI_INTEGER, zz, zz, MPI_COMM_WORLD, ierr)
+        CALL print_err_stop(std_out, "MPI_SEND of stopping workers failed.", INT(ierr, KIND=ik))
+    END DO
+
+END FUNCTION stop_workers
+
+
+
 END MODULE auxiliaries_of_tensor_optimizer
 
 !------------------------------------------------------------------------------
@@ -65,7 +94,7 @@ END MODULE auxiliaries_of_tensor_optimizer
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !
 !> \date 27.10.2020
-!> \modified 06.01.2022
+!> \modified 07.01.2022
 !------------------------------------------------------------------------------
 PROGRAM tensor_optimizer
 
@@ -80,8 +109,8 @@ USE auxiliaries_of_tensor_optimizer
 IMPLICIT NONE
 
 ! Parameter
-INTEGER(KIND=ik), PARAMETER :: debug = 2   ! Choose an even integer!!
-REAL   (KIND=rk), PARAMETER :: lower_thres_percentage = 0.1
+INTEGER(KIND=ik), PARAMETER :: debug = 0
+REAL   (KIND=rk), PARAMETER :: lower_thres_percentage = 0.01
 
 ! Variables
 TYPE(tensor_2nd_rank_R66) :: dummy
@@ -92,6 +121,7 @@ TYPE(tensor_2nd_rank_R66), DIMENSION(:), ALLOCATABLE :: tlcl_res
 TYPE(materialcard) :: bone
 
 CHARACTER(LEN=mcl), DIMENSION(:), ALLOCATABLE :: m_rry      
+CHARACTER(LEN=mcl) :: crit_file
 CHARACTER(LEN=scl) :: restart, restart_cmd_arg, re_mono, re_orth, re_ani1, re_ani2
 CHARACTER(LEN=scl) :: suf_covo, suf_mono, suf_orth, suf_ani1, suf_ani2, temp_suf    
 CHARACTER(LEN=scl) :: binary, dmn_no, suffix
@@ -102,10 +132,10 @@ REAL(KIND=rk) :: start, end
 
 INTEGER(KIND=ik) :: fh_covo, fh_mono, fh_orth, fh_ani1, fh_ani2, fhwcrit
 INTEGER(KIND=ik) :: exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0
-INTEGER(KIND=ik) :: jj, kk, mm, zz
+INTEGER(KIND=ik) :: jj, kk, mm, stat, invalid_entries, iostat
 
 LOGICAL, DIMENSION(4) :: execute_optimization = .FALSE.
-LOGICAL :: stp, print_criteria, dmn_found = .FALSE.
+LOGICAL :: stp, print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
 
 INTEGER(KIND=mik) :: ierr, my_rank, size_mpi, mii
 INTEGER(KIND=mik) :: active, feed_ranks, crs, crs_counter
@@ -115,7 +145,7 @@ INTEGER(KIND=mik), DIMENSION(:), ALLOCATABLE :: req_list
 
 INTEGER(KIND=mik) :: MPI_tensor_2nd_rank_R66
 INTEGER(KIND=mik), DIMENSION(6) :: blocklen, dtype 
-INTEGER(KIND=MPI_ADDRESS_KIND)  :: disp(6), base
+INTEGER(KIND=MPI_ADDRESS_KIND) :: disp(6), base
 
 ! Initialize MPI Environment
 CALL MPI_INIT(ierr)
@@ -221,7 +251,7 @@ IF(my_rank == 0) THEN
     WRITE(fh_log, FMT_TXT)     "Date: "//date//" [ccyymmdd]"
     WRITE(fh_log, FMT_TXT)     "Time: "//time//" [hhmmss.sss]"
     WRITE(fh_log, FMT_TXT_SEP)  
-    WRITE(fh_log, FMT_MSG_AI0) "Processors:", size_mpi  
+    WRITE(fh_log, FMT_MSG_xAI0) "Processors:", size_mpi  
     
     !------------------------------------------------------------------------------
     ! Create/Open tensor files. Basically tuned csv data.
@@ -271,7 +301,14 @@ IF(my_rank == 0) THEN
         CALL print_err_stop(std_out, mssg, 1)
     END IF
 
-    IF((exp_dmn_crit < -0_ik) .AND. (covo_amnt_lines*crs > 100_ik)) THEN
+    !------------------------------------------------------------------------------
+    ! Export domain if requested number is positive (and matches an entry in file)
+    ! Export all domains if number requested = -10 (and matrix /= 0._rk)
+    ! Export nothing if number ((<0_ik) .AND. (/= 10_ik))
+    !------------------------------------------------------------------------------
+    IF((exp_dmn_crit == -10_ik) .OR. (exp_dmn_crit >= 0_ik))  crit_exp_req = .TRUE.
+
+    IF((exp_dmn_crit == -10_ik) .AND. (covo_amnt_lines * crs > 100_ik)) THEN
         mssg = "Are you sure to export the criteria spaces of more than 100 &
             &optimizations (dmns*criterias) to the file system via *.vtk files?! &
             &If yes, change the source and recompile :-)"
@@ -279,9 +316,9 @@ IF(my_rank == 0) THEN
     END IF
 
     IF(debug >= 0) THEN
-        WRITE(std_out, FMT_MSG_AI0) "Debug Level:", debug
-        WRITE(std_out, FMT_MSG_AI0) "Processors:", size_mpi  
-        WRITE(std_out, FMT_MSG_AI0) "Amount of domains:", covo_amnt_lines-1_ik
+        WRITE(std_out, FMT_DBG_xAI0) "Debug Level:", debug
+        WRITE(std_out, FMT_DBG_xAI0) "Processors:", size_mpi  
+        WRITE(std_out, FMT_DBG_xAI0) "Amount of domains:", covo_amnt_lines-1_ik
         WRITE(std_out, FMT_TXT_SEP)
         FLUSH(std_out)
     END IF
@@ -292,8 +329,17 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ALLOCATE(tglbl_in(covo_amnt_lines-1_ik))
     CALL parse_tensor_2nd_rank_R66(fh_covo, in%p_n_bsnm//TRIM(suf_covo), &
-        covo_amnt_lines, tglbl_in)
+        covo_amnt_lines, tglbl_in, invalid_entries)
 
+    IF(covo_amnt_lines == invalid_entries+1_ik) THEN
+        
+        stat = stop_workers(size_mpi)
+        
+        mssg = "No valid data found. Probably an implementation issue or an &
+            &invalid file format."
+        CALL print_err_stop(std_out, mssg, 1)
+        
+    END IF
     !------------------------------------------------------------------------------
     ! Allocate global results array. Need to loop over execute_optimization 
     ! to properly assign the tglbl_res(entries, :)
@@ -305,7 +351,11 @@ END IF ! (my_rank == 0)
 CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
-CALL MPI_BCAST(execute_optimization, 4_mik, MPI_LOGICAL, 0_mik, MPI_COMM_WORLD, ierr)
+!------------------------------------------------------------------------------
+! Why 8? Only 4 entries in array. 
+! MPI_LOGICAL = 4 Byte, Fortran_Logical = 8 Byte?
+!------------------------------------------------------------------------------
+CALL MPI_BCAST(execute_optimization, 8_mik, MPI_LOGICAL, 0_mik, MPI_COMM_WORLD, ierr)
 
 CALL MPI_BCAST(exp_dmn_crit, 1_mik, MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
@@ -325,12 +375,29 @@ statuses_mpi=0_mik
 IF (my_rank==0) THEN
 
     IF(debug >= 0) THEN
-        WRITE(std_out, FMT_MSG) "Starting worker supply."
+        WRITE(std_out, FMT_DBG) "Starting worker supply."
+        WRITE(std_out, FMT_DBG_xAF0) "Young modulus: ", bone%E
+        WRITE(std_out, FMT_DBG_xAF0) "Poissions ratio: ", bone%nu
+        WRITE(std_out, FMT_DBG_xAF0) "Mat out threshold: ", lower_thres_percentage * bone%E
+        WRITE(std_out, FMT_DBG_SEP)
         FLUSH(std_out)
     END IF
 
     mii = 1_mik
     feed_ranks = 1_mik 
+        
+    IF(debug >= 2) THEN
+        ! DO mii = 1, 9
+        WRITE(std_out, FMT_DBG_AI0AxI0) "tglbl_in(" ,mii, ")%dmn: ", tglbl_in(mii)%dmn
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%density: ", tglbl_in(mii)%density
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%doa_zener: ", tglbl_in(mii)%doa_zener
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%doa_gebert: ", tglbl_in(mii)%doa_gebert
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%pos: ", tglbl_in(mii)%pos
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%mat(1,1:3): ", tglbl_in(mii)%mat(1,1:3)
+        WRITE(std_out, FMT_TXT_SEP)
+        FLUSH(std_out)
+        ! end do
+    END IF
 
     !------------------------------------------------------------------------------
     ! Supply all worker masters with their first tensor
@@ -346,7 +413,7 @@ IF (my_rank==0) THEN
         !------------------------------------------------------------------------------
         ! Track whether the domain requested is contained in the input data.
         !------------------------------------------------------------------------------
-        IF(exp_dmn_crit > 0_ik) THEN
+        IF(exp_dmn_crit >= 0_ik) THEN
             IF(tglbl_in(mii)%dmn == exp_dmn_crit) dmn_found = .TRUE.
         END IF
 
@@ -363,22 +430,28 @@ IF (my_rank==0) THEN
                 tglbl_res(mm, mii)%dmn = tglbl_in(mii)%dmn
             END DO
             zero_matrix_counter = zero_matrix_counter + 1_ik
-
+ 
+            mii = mii + 1_mik
+    
             CYCLE
         END IF
 
         !------------------------------------------------------------------------------
-        ! Give feedback to user
-        !------------------------------------------------------------------------------
+        ! Give feedback to user. Only active if the machine provides an interactive 
+        ! terminal, which is determined by the environmemnt.
+        !------------------------------------------------------------------------------)
         IF(std_out == 6_ik) THEN
-            CALL EXECUTE_COMMAND_LINE('printf "\033c"')
-            
-            WRITE(std_out, FMT_TXT_A3I0) "Processed domains: ", mii, " of ", covo_amnt_lines-1_ik
-            WRITE(std_out, FMT_TXT) "Most current input to compute:"
-            WRITE(std_out, FMT_TXT_A3I0) "Total 0-matrices: ", zero_matrix_counter
+            CALL EXECUTE_COMMAND_LINE("clear")
+
+            CALL show_title()
+
+            WRITE(std_out, FMT_TXT_xAI0) "Processed domains: ", mii, " of ", covo_amnt_lines-1_ik
+            WRITE(std_out, FMT_TXT_xAI0) "Most current input to compute:", tglbl_in(mii)%dmn
+            WRITE(std_out, FMT_TXT_xAI0) "Total 0-matrices: ", zero_matrix_counter
             WRITE(std_out, FMT_TXT) ""
-            WRITE(dmn_no, '(I0)') tin%dmn
-            CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), 'spl', '', tglbl_in(mii)%mat)
+
+            WRITE(dmn_no, '(I0)') tin%dmn ! Write the domain number to string (!)
+            CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), 'spl', mat=tglbl_in(mii)%mat)
         END IF
 
         !------------------------------------------------------------------------------
@@ -390,7 +463,7 @@ IF (my_rank==0) THEN
         !------------------------------------------------------------------------------
         ! Call the domain an active one.
         !------------------------------------------------------------------------------
-        CALL MPI_SEND(1_mik, 1_mik, MPI_INTEGER, feed_ranks, -1_mik, MPI_COMM_WORLD,ierr)
+        CALL MPI_SEND(1_mik, 1_mik, MPI_INTEGER, feed_ranks, feed_ranks, MPI_COMM_WORLD,ierr)
         CALL print_err_stop(std_out, "MPI_SEND of activity didn't succeed", INT(ierr, KIND=ik))
 
         !------------------------------------------------------------------------------
@@ -404,7 +477,7 @@ IF (my_rank==0) THEN
         ! Log to monitor file
         !------------------------------------------------------------------------------
         IF(debug >= 0) THEN
-            WRITE(fh_mon, FMT_MSG_2AI0)"MPI rank: ", feed_ranks, " Domain number: ", tglbl_in(mii)%dmn
+            WRITE(fh_mon, FMT_DBG_xAI0)"MPI rank: ", feed_ranks, " Domain number: ", tglbl_in(mii)%dmn
             FLUSH(fh_mon)
         END IF
 
@@ -413,10 +486,12 @@ IF (my_rank==0) THEN
         ! Tensors are not sortded automatically.
         !------------------------------------------------------------------------------
         CALL MPI_IRECV(tglbl_res(:, mii), crs, MPI_tensor_2nd_rank_R66, feed_ranks, &
-            INT(tglbl_in(mii)%dmn, KIND=mik), MPI_COMM_WORLD, req_list(mii), ierr)
+            INT(tglbl_in(mii)%dmn, KIND=mik), MPI_COMM_WORLD, req_list(feed_ranks), ierr)
         CALL print_err_stop(std_out, "MPI_IRECV of activity(mii) failed.", INT(ierr, KIND=ik))
 
         feed_ranks = feed_ranks + 1_ik  
+
+        mii = mii + 1_mik
     END DO
     ! Still my_rank == 0
 
@@ -424,14 +499,7 @@ IF (my_rank==0) THEN
     CALL print_err_stop(std_out, "MPI_WAITANY on req_list for IRECV of tglbl_res failed.", &
         INT(ierr, KIND=ik))
 
-    !------------------------------------------------------------------------------
-    ! Stop workers properly by sending an activity = -1 info
-    !------------------------------------------------------------------------------
-    DO zz = 1_mik, size_mpi-1_mik
-        CALL MPI_SEND(-1_mik, 1_mik, MPI_INTEGER, INT(zz, mik), -1_mik, MPI_COMM_WORLD,ierr)
-        CALL print_err_stop(std_out, "MPI_SEND of activity didn't succeed", INT(ierr, KIND=ik))
-    END DO
-    
+    stat = stop_workers(size_mpi)
 !------------------------------------------------------------------------------
 ! Ranks > 0 -- Workers
 ! Worker: Must use my_rank as tag
@@ -446,10 +514,10 @@ ELSE
         !------------------------------------------------------------------------------
         ! Stop (gracefully) if workers receive an active = -1 information.
         !------------------------------------------------------------------------------
-        CALL MPI_RECV(active, 1_mik, MPI_INTEGER, 0_mik, -1_mik, MPI_COMM_WORLD, stmpi, ierr)
+        CALL MPI_RECV(active, 1_mik, MPI_INTEGER, 0_mik, my_rank, MPI_COMM_WORLD, stmpi, ierr)
         CALL print_err_stop(std_out, "MPI_RECV on active failed.", INT(ierr, KIND=ik))
 
-        IF(active == -1) EXIT
+        IF(active == -1) GOTO 1001
 
         !------------------------------------------------------------------------------
         ! Receive tensor (derived type of tensor_2nd_rank_R66)
@@ -463,7 +531,7 @@ ELSE
         !------------------------------------------------------------------------------
         print_criteria = .FALSE.
 
-        IF((exp_dmn_crit == tin%dmn) .OR. (exp_dmn_crit < 0_ik)) print_criteria = .TRUE.
+        IF((exp_dmn_crit == tin%dmn) .OR. (exp_dmn_crit == -10_ik)) print_criteria = .TRUE.
 
         WRITE(dmn_no, '(I0)') tin%dmn
 
@@ -475,6 +543,17 @@ ELSE
         DO jj = 1_ik, 4_ik
             IF(.NOT. execute_optimization(jj)) CYCLE
 
+            IF(debug >= 3) THEN
+                WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
+                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%density: ", tin%density
+                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%doa_zener: ", tin%doa_zener
+                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%doa_gebert: ", tin%doa_gebert
+                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%pos: ", tin%pos
+                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%mat(1,1:3): ", tin%mat(1,1:3)
+                WRITE(std_out, FMT_TXT_SEP)
+                FLUSH(std_out)
+            END IF
+
             !------------------------------------------------------------------------------
             ! Optimization is capable of accepting dig /= 0._rk. Tensors can be optimized
             ! several times and do not need to be restarted from the position of the
@@ -485,6 +564,13 @@ ELSE
             dig = tin%pos 
 
             DO kk = 1_ik, 2_ik
+                IF(debug >= 3) THEN
+                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
+                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization step: ", kk
+                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization case: ", jj
+                    WRITE(std_out, FMT_TXT_SEP)
+                    FLUSH(std_out)
+                END IF
                 !------------------------------------------------------------------------------
                 ! Variables are global ones, which are valid for each specific rank (!)
                 !
@@ -493,19 +579,21 @@ ELSE
                 !------------------------------------------------------------------------------
                 IF(kk == 1_ik) THEN
                     intervall = 1._rk
-                    pm_steps = 182_ik
+                    ! pm_steps = 182_ik
+                    pm_steps = 10_ik
                 ELSE
                     tin%mat = tout%mat
                     dig = tout%pos
                     intervall = 0.025_rk
-                    pm_steps = 80_ik
+                    ! pm_steps = 80_ik
+                    pm_steps = 10_ik
                 END IF
 
                 SELECT CASE(jj)
-                    CASE(1); CALL opt_stiff('monotropic'); temp_suf = "mono"
-                    CASE(2); CALL opt_stiff('orthotropic'); temp_suf = "orth"
-                    CASE(3); CALL opt_stiff('anisotropic1'); temp_suf = "an1"
-                    CASE(4); CALL opt_stiff('anisotropic2'); temp_suf = "an2"
+                    CASE(1); CALL opt_stiff('monotropic'); temp_suf = ".mono"
+                    CASE(2); CALL opt_stiff('orthotropic'); temp_suf = ".orth"
+                    CASE(3); CALL opt_stiff('anisotropic1'); temp_suf = ".an1"
+                    CASE(4); CALL opt_stiff('anisotropic2'); temp_suf = ".an2"
                 END SELECT        
 
                 !------------------------------------------------------------------------------
@@ -528,8 +616,25 @@ ELSE
             !------------------------------------------------------------------------------
             tlcl_res(crs_counter) = tout
 
-            CALL write_criteria_space_to_vtk(&
-                out%p_n_bsnm//".stte."//dmn_no//"."//TRIM(temp_suf)//"."//vtk_suf)
+            IF(print_criteria) THEN 
+                crit_file = TRIM(out%p_n_bsnm)//".stte."//TRIM(dmn_no)//TRIM(temp_suf)//vtk_suf
+
+                INQUIRE(FILE=TRIM(crit_file), EXIST=fex)
+
+                IF(fex) THEN
+                    IF(restart == 'Y') THEN
+                        CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
+
+                        CALL print_err_stop(std_out, &
+                            "Removing a the file "//TRIM(crit_file)//" failed.", iostat)
+                    ELSE
+                        CALL print_err_stop(std_out, &
+                            "File "//TRIM(crit_file)//" exists and restart is 'N'.", iostat)
+                    END IF
+                END IF
+
+                CALL write_criteria_space_to_vtk(TRIM(crit_file))
+            END IF
 
             crs_counter = crs_counter + 1_mik
 
@@ -538,30 +643,6 @@ ELSE
         CALL MPI_SEND(tlcl_res, INT(crs, KIND=mik), MPI_tensor_2nd_rank_R66, 0_mik, &
             INT(tout%dmn, KIND=mik), MPI_COMM_WORLD, ierr)
         CALL print_err_stop(std_out, "MPI_SEND on tlcl_res failed.", INT(ierr, KIND=ik))
-
-        ! CALL MPI_SEND(tlcl_res%dmn, INT(crs, KIND=mik), MPI_INTEGER8, 0_mik, tin%dmn, &
-        !     MPI_COMM_WORLD, ierr)
-        ! CALL print_err_stop(std_out, "MPI_SEND on tlcl_res%dmn failed.", INT(ierr, KIND=ik))
-
-        ! CALL MPI_SEND(tlcl_res%density, INT(crs, KIND=mik), MPI_DOUBLE_PRECISION, 0_mik, tin%dmn, &
-        !     MPI_COMM_WORLD, ierr)
-        ! CALL print_err_stop(std_out, "MPI_SEND on tlcl_res%density failed.", INT(ierr, KIND=ik))
-
-        ! CALL MPI_SEND(tlcl_res%doa_zener, INT(crs, KIND=mik), MPI_DOUBLE_PRECISION, 0_mik, tin%dmn, &
-        !     MPI_COMM_WORLD, ierr)
-        ! CALL print_err_stop(std_out, "MPI_SEND on tlcl_res%doa_zener failed.", INT(ierr, KIND=ik))
-
-        ! CALL MPI_SEND(tlcl_res%doa_gebert, INT(crs, KIND=mik), MPI_DOUBLE_PRECISION, 0_mik, tin%dmn, &
-        !     MPI_COMM_WORLD, ierr)
-        ! CALL print_err_stop(std_out, "MPI_SEND on tlcl_res%doa_gebert failed.", INT(ierr, KIND=ik))
-
-        ! CALL MPI_SEND(tlcl_res%pos, INT(crs, KIND=mik)*3_mik, MPI_DOUBLE_PRECISION, 0_mik, tin%dmn, &
-        !     MPI_COMM_WORLD, ierr)
-        ! CALL print_err_stop(std_out, "MPI_SEND on tlcl_res%mat failed.", INT(ierr, KIND=ik))
-
-        ! CALL MPI_SEND(tlcl_res%mat, INT(crs, KIND=mik)*36_mik, MPI_DOUBLE_PRECISION, 0_mik, tin%dmn, &
-        !     MPI_COMM_WORLD, ierr)
-        ! CALL print_err_stop(std_out, "MPI_SEND on tlcl_res%mat failed.", INT(ierr, KIND=ik))
 
     END DO
 
@@ -578,7 +659,7 @@ IF(my_rank == 0) THEN
     DO jj = 1_ik, 4_ik
         IF(.NOT. execute_optimization(jj)) CYCLE
 
-        crs_counter = 1_mik
+        crs_counter = crs_counter + 1_mik
     
         SELECT CASE(jj)
             CASE(1); fhwcrit = fh_mono; suffix = suf_mono
@@ -591,6 +672,8 @@ IF(my_rank == 0) THEN
         CALL meta_stop_ascii(fhwcrit, suffix)
 
     END DO
+
+    CALL meta_stop_ascii(fh_covo, suf_covo)
 
     CALL meta_write(fhmeo, 'ZERO_MATRICES', '(-)', zero_matrix_counter)
 
@@ -612,24 +695,29 @@ IF(my_rank == 0) THEN
     CALL meta_stop_ascii(fh_log, log_suf)
     IF(debug >= 0) CALL meta_stop_ascii(fh_mon, mon_suf)
 
-
     IF(std_out/=6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
 
     CALL CPU_TIME(end)
 
-    WRITE(std_out,FMT_TXT_SEP)
-    WRITE(std_out,FMT_TXT_AF0A) 'Overall Time = ', (end-start) / 60._rk ,' Minutes'
-    WRITE(std_out,FMT_TXT_AF0A) 'CPU time = ', (end-start) / 60._rk / 60._rk * size_mpi,' Hours'
+    WRITE(std_out,FMT_TXT_xAF0) 'Overall Time = ', (end-start) / 60._rk ,' Minutes'
+    WRITE(std_out,FMT_TXT_xAF0) 'CPU time = ', (end-start) / 60._rk / 60._rk * size_mpi,' Hours'
     WRITE(std_out,FMT_TXT_SEP)
 
-    IF(.NOT. dmn_found) THEN
-        WRITE(std_out,FMT_TXT_A3I0) "Following domain number optimization criteria export was &
-            &requested, but no stiffness tensor with a corresponding domain number was not &
-            &found: Domain ", exp_dmn_crit
+    IF((.NOT. dmn_found) .AND. (crit_exp_req) .AND. (exp_dmn_crit /= -10_ik)) THEN
+        WRITE(std_out,FMT_TXT) "Domain number for crit export requested, but no &
+        &corresponding tensor found:"
+        WRITE(std_out,FMT_TXT_xAI0) "Domain ", exp_dmn_crit
+        WRITE(std_out,FMT_TXT) "If problem was on OSI-Layer 8, then give a *.stte.covo file &
+            &with only the domain(s) requested."
+        WRITE(std_out,FMT_TXT) ""      
+    END IF
+    
+    IF(.NOT. crit_exp_req) THEN
+        WRITE(std_out,FMT_TXT) "No domain criteria space export requested."
         WRITE(std_out,FMT_TXT) ""      
     END IF
 
-    WRITE(std_out,FMT_TXT_AF0A) 'Program finished.'
+    WRITE(std_out,FMT_TXT) 'Program finished.'
     WRITE(std_out,FMT_TXT_SEP)
 
 END IF ! (my_rank == 0)

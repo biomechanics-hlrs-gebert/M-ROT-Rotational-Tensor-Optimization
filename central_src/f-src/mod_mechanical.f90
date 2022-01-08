@@ -12,7 +12,7 @@ USE global_std
 
 IMPLICIT NONE
 
-!------------------------------------------------------------------------------
+!----------------------------------------------------------TD00-0_tc_Dev_tensor_data.meta--------------------
 ! Describe a tensor and its state in respect to the position of the control
 ! volume. Required to fully trace the origin of a stiffness matrix (tensor).
 ! 
@@ -315,12 +315,14 @@ FUNCTION gebert_density_voigt(mat, E, v) RESULT (density)
 
    !------------------------------------------------------------------------------  
    ! Minor diagonals/zero entries of the density matrix dmat are inf.  
-   !------------------------------------------------------------------------------  
+   !------------------------------------------------------------------------------    
    dmat = mat / voigt_mat 
 
    density =((dmat(1,1)+dmat(2,2)+dmat(3,3))/3._rk + &     
              (dmat(4,4)+dmat(5,5)+dmat(6,6))/3._rk + &     
              (dmat(1,2)+dmat(1,3)+dmat(2,3))/3._rk) / 3._rk
+
+   ! density = SUM(mat)/36._rk / E
 
 END FUNCTION gebert_density_voigt
 

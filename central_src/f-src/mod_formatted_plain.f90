@@ -69,7 +69,7 @@ LOGICAL :: sym_u
 dim1 = SIZE(mat, 1)
 dim2 = SIZE(mat, 2)
 fmt_u = 'standard'
-mssg='' 
+mssg = '' 
 text = ''
 
 prec = PRECISION(mat)
@@ -103,7 +103,7 @@ SELECT CASE (TRIM(fmt_u))
         WRITE(sep  ,  "(A,I0,A)")    "(",dim2*10,"('-'))"        
 
         ! Calculate text and unit length. If name to long - overflow formaming to the right
-        nm_fmt_lngth  = dim2*10-4-2-LEN_TRIM(name)-LEN_TRIM(text) 
+        nm_fmt_lngth  = dim2*10-4-LEN_TRIM(name)-LEN_TRIM(text) 
 
    CASE('wxm', 'wxmaxima')
        WRITE(fmt_a, '(5(A,I0),A)')  "(' [',",dim2-1,"(E",fw,".",prec,"E2,','),E",fw,".",prec,"E2,'],' )"
@@ -127,7 +127,6 @@ WRITE(nm_fmt, "(A,I0,A)")  "(2('-') ,3A,", nm_fmt_lngth ,"('-'), A)"
 !------------------------------------------------------------------------------
 ! Write output
 !------------------------------------------------------------------------------
-WRITE(fh, '(A)')
 WRITE(fh, sep)                                    ! Separator
 WRITE(fh, nm_fmt) ' ',TRIM(name), ' ', TRIM(text) ! Named separator
 
@@ -459,15 +458,16 @@ END SUBROUTINE write_tensor_2nd_rank_R66_header
 !
 !> @param[in] row An unparsed row of the tensor_2nd_rank_R66 file
 !> @param[out] tensor_of_row The resulting TYPE tensor_2nd_rank_R66 file
+!> @param[out] invalid Whether the data is corrupt
 !------------------------------------------------------------------------------  
-SUBROUTINE parse_tensor_2nd_rank_R66_row(row, tensor_of_row)
+SUBROUTINE parse_tensor_2nd_rank_R66_row(row, tensor_of_row, invalid)
 
 CHARACTER(LEN=*), INTENT(IN) :: row
 TYPE(tensor_2nd_rank_R66), INTENT(OUT) :: tensor_of_row
+LOGICAL, INTENT(OUT) :: invalid
 
 CHARACTER(LEN=mcl) :: tokens(100)
 INTEGER(KIND=ik) :: ntokens, ii, jj, tkn
-LOGICAL :: invalid
 
 invalid = .FALSE.
 
@@ -482,6 +482,9 @@ IF(ntokens /= 43_ik) invalid = .TRUE.
 READ(tokens(1), '(I20)') tensor_of_row%dmn 
 
 IF(invalid) THEN   
+    WRITE(std_out, FMT_WRN_xAI0) &
+        "Invalid 'domain' "//TRIM(tokens(1))//" amount of tokens: ", ntokens
+
     tensor_of_row%dmn        = -tensor_of_row%dmn
     tensor_of_row%density    = 0._rk
     tensor_of_row%doa_zener  = 0._rk
@@ -559,19 +562,23 @@ END SUBROUTINE write_tensor_2nd_rank_R66_row
 !> @param[in] filename Filename of the input file
 !> @param[in] amnt_lines Number of lines contained in the file
 !> @param[out] tensors_in Array of all input tensors
+!> @param[out] invalid_entries Amount of invalid entries
 !------------------------------------------------------------------------------  
-SUBROUTINE parse_tensor_2nd_rank_R66(fh, filename, amnt_lines, tensors_in)
+SUBROUTINE parse_tensor_2nd_rank_R66(fh, filename, amnt_lines, tensors_in, invalid_entries)
 
 INTEGER(KIND=ik), INTENT(IN) :: fh, amnt_lines
 CHARACTER(LEN=*), INTENT(IN) :: filename
 TYPE(tensor_2nd_rank_R66), DIMENSION(:), INTENT(OUT) :: tensors_in
-
+INTEGER(KIND=ik), INTENT(OUT) :: invalid_entries
 !------------------------------------------------------------------------------
 ! Line of csv may be pretty long (>40 floats)
 !------------------------------------------------------------------------------
 CHARACTER(LEN=10_ik*mcl) :: header, line
 INTEGER(KIND=ik) :: ii
-LOGICAL :: abort
+LOGICAL :: abort, invalid
+
+invalid_entries = 0_ik
+invalid = .FALSE. 
 
 !------------------------------------------------------------------------------
 ! Parse the header of the "csv" data
@@ -589,7 +596,8 @@ END IF
 DO ii = 2_ik, amnt_lines
     READ(fh, '(A)') line
 
-    CALL parse_tensor_2nd_rank_R66_row(line, tensors_in(ii-1_ik))
+    CALL parse_tensor_2nd_rank_R66_row(line, tensors_in(ii-1_ik), invalid)
+    IF(invalid) invalid_entries = invalid_entries + 1_ik 
 END DO
 
 END SUBROUTINE parse_tensor_2nd_rank_R66
@@ -609,7 +617,7 @@ END SUBROUTINE parse_tensor_2nd_rank_R66
 SUBROUTINE write_tensor_2nd_rank_R66(fh, amnt_lines, tensors_in)
 
 INTEGER(KIND=ik), INTENT(IN) :: fh, amnt_lines
-TYPE(tensor_2nd_rank_R66), DIMENSION(:), INTENT(OUT) :: tensors_in
+TYPE(tensor_2nd_rank_R66), DIMENSION(:), INTENT(IN) :: tensors_in
 
 INTEGER(KIND=ik) :: ii
 
