@@ -34,9 +34,9 @@ CHARACTER(LEN=*), PARAMETER :: AI0xAF0 = "(A,"//FMT_INT//",1x,*(A,1x,"//FMT_REAL
 CHARACTER(LEN=*), PARAMETER :: AI0xAI0 = "(A,"//FMT_INT//",1x,*(A,1x,"//FMT_INT//")))"
 CHARACTER(LEN=*), PARAMETER :: AI0AxF0 = "(A,"//FMT_INT//",1x,A,T"//TAB_WDTH//",*(1x,"//FMT_REAL//")))"
 CHARACTER(LEN=*), PARAMETER :: AI0AxI0 = "(A,"//FMT_INT//",1x,A,T"//TAB_WDTH//",*(1x,"//FMT_INT//")))"
-CHARACTER(LEN=*), PARAMETER :: xAI0    = "*(A,1x,T"//TAB_WDTH//","//FMT_INT//",1x))"
-CHARACTER(LEN=*), PARAMETER :: xAF0    = "*(A,1x,T"//TAB_WDTH//","//FMT_REAL//",1x))"
-CHARACTER(LEN=*), PARAMETER :: xAL     = "*(A,1x,T"//TAB_WDTH//",L1,1x))"
+CHARACTER(LEN=*), PARAMETER :: xAI0    = "*(A,1x,"//FMT_INT//",1x))"
+CHARACTER(LEN=*), PARAMETER :: xAF0    = "*(A,1x,"//FMT_REAL//",1x))"
+CHARACTER(LEN=*), PARAMETER :: xAL     = "*(A,1x,L1,1x))"
 !
 !------------------------------------------------------------------------------
 ! The following formats are wrappers to mask a direct use of the format 

@@ -351,6 +351,8 @@ END IF ! (my_rank == 0)
 CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
+CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+
 !------------------------------------------------------------------------------
 ! Why 8? Only 4 entries in array. 
 ! MPI_LOGICAL = 4 Byte, Fortran_Logical = 8 Byte?
