@@ -268,29 +268,9 @@ END DO
 sym = 1._rk - (cummu / entry_counter)
 
 !------------------------------------------------------------------------------
-! Write matout with zeros to show check_sym if matin is symmetric
+! Write matout
 !------------------------------------------------------------------------------
-IF(PRESENT(matout)) THEN 
-    matout = matin
-
-    ! IF (sym <= num_zero) THEN
-    !     ii=1_ik
-    !     DO WHILE (ii < SIZE(matin, DIM=1))
-        
-    !         jj=2_ik
-    !         DO WHILE (jj <= SIZE(matin, DIM=2))
-    !             matout(jj,ii) = 0._rk
-
-    !             jj = jj + 1_ik
-    !         END DO
-
-    !         ii = ii + 1_ik
-    !     END DO 
-    ! END IF
-
-    sym = sym * 10._rk
-END IF
-
+IF(PRESENT(matout)) matout = matin 
 
 END SUBROUTINE check_sym
 

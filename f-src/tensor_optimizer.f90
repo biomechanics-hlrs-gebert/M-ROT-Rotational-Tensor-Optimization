@@ -456,6 +456,10 @@ IF (my_rank==0) THEN
             WRITE(dmn_no, '(I0)') tglbl_in(mii)%dmn ! Write the domain number to string (!)
 
             CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), tglbl_in(mii)%mat, 'spl')
+
+            WRITE (std_out, FMT_TXT) "Lots of optimization steps requested."
+            WRITE (std_out, FMT_TXT) "The computation may take a long time."
+                
         END IF
 
         !------------------------------------------------------------------------------
@@ -583,14 +587,19 @@ ELSE
                 !------------------------------------------------------------------------------
                 IF(kk == 1_ik) THEN
                     intervall = 1._rk
-                    ! pm_steps = 182_ik
-                    pm_steps = 30_ik
+                    pm_steps = 182_ik
+
+                   !------------------------------------------------------------------------------
+                   ! Shorten turnaround times
+                   !------------------------------------------------------------------------------
+                   IF(debug >= 3) pm_steps = 30_ik
                 ELSE
                     tin%mat = tout%mat
                     dig = tout%pos
                     intervall = 0.025_rk
-                    ! pm_steps = 80_ik
-                    pm_steps = 30_ik
+                    pm_steps = 80_ik
+
+                    IF(debug >= 3) pm_steps = 30_ik
                 END IF
 
                 SELECT CASE(jj)

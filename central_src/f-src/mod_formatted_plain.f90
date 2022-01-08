@@ -141,9 +141,9 @@ DO ii=1, dim1
         IF ((sym) .AND. (ii==dim1) .AND. (jj==1)) THEN
             SELECT CASE(fmt_u)
             CASE('spl', 'simple')
-                WRITE(fh, '(A)', ADVANCE='NO') "sym /= (%)"
+                WRITE(fh, '(A)', ADVANCE='NO') "symmetric "
             CASE('std', 'standard')
-                WRITE(fh, '(A)', ADVANCE='NO') "   sym /= (%)          "
+                WRITE(fh, '(A)', ADVANCE='NO') "   symmetric           "
             END SELECT
 
         ELSE IF ((sym) .AND. (ii==dim1) .AND. (jj==2)) THEN
