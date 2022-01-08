@@ -128,7 +128,7 @@ CHARACTER(LEN=scl) :: binary, dmn_no, suffix
 CHARACTER(LEN=  8) :: date
 CHARACTER(LEN= 10) :: time
 
-REAL(KIND=rk) :: start, end
+REAL(KIND=rk) :: start, end, sym
 
 INTEGER(KIND=ik) :: fh_covo, fh_mono, fh_orth, fh_ani1, fh_ani2, fhwcrit
 INTEGER(KIND=ik) :: exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0
@@ -144,8 +144,8 @@ INTEGER(KIND=mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
 INTEGER(KIND=mik), DIMENSION(:), ALLOCATABLE :: req_list
 
 INTEGER(KIND=mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(KIND=mik), DIMENSION(6) :: blocklen, dtype 
-INTEGER(KIND=MPI_ADDRESS_KIND) :: disp(6), base
+INTEGER(KIND=mik), DIMENSION(7) :: blocklen, dtype 
+INTEGER(KIND=MPI_ADDRESS_KIND) :: disp(7), base
 
 ! Initialize MPI Environment
 CALL MPI_INIT(ierr)
@@ -167,20 +167,21 @@ CALL MPI_GET_ADDRESS(dummy%dmn, disp(1), ierr)
 CALL MPI_GET_ADDRESS(dummy%density, disp(2), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(3), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(4), ierr) 
-CALL MPI_GET_ADDRESS(dummy%pos, disp(5), ierr) 
-CALL MPI_GET_ADDRESS(dummy%mat, disp(6), ierr) 
+CALL MPI_GET_ADDRESS(dummy%sym, disp(5), ierr) 
+CALL MPI_GET_ADDRESS(dummy%pos, disp(6), ierr) 
+CALL MPI_GET_ADDRESS(dummy%mat, disp(7), ierr) 
 	
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1:4) = 1 
-blocklen(5) = 3 
-blocklen(6) = 36 
+blocklen(1:5) = 1 
+blocklen(6) = 3 
+blocklen(7) = 36 
 
 dtype(1) = MPI_INTEGER8 
-dtype(2:6) = MPI_DOUBLE_PRECISION
+dtype(2:7) = MPI_DOUBLE_PRECISION
 
-CALL MPI_TYPE_CREATE_STRUCT(6_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(7_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
@@ -452,8 +453,9 @@ IF (my_rank==0) THEN
             WRITE(std_out, FMT_TXT_xAI0) "Total 0-matrices: ", zero_matrix_counter
             WRITE(std_out, FMT_TXT) ""
 
-            WRITE(dmn_no, '(I0)') tin%dmn ! Write the domain number to string (!)
-            CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), 'spl', mat=tglbl_in(mii)%mat)
+            WRITE(dmn_no, '(I0)') tglbl_in(mii)%dmn ! Write the domain number to string (!)
+
+            CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), tglbl_in(mii)%mat, 'spl')
         END IF
 
         !------------------------------------------------------------------------------
@@ -582,13 +584,13 @@ ELSE
                 IF(kk == 1_ik) THEN
                     intervall = 1._rk
                     ! pm_steps = 182_ik
-                    pm_steps = 10_ik
+                    pm_steps = 30_ik
                 ELSE
                     tin%mat = tout%mat
                     dig = tout%pos
                     intervall = 0.025_rk
                     ! pm_steps = 80_ik
-                    pm_steps = 10_ik
+                    pm_steps = 30_ik
                 END IF
 
                 SELECT CASE(jj)
@@ -602,11 +604,13 @@ ELSE
                 ! Tilts until S11 > S22 > S33 
                 !------------------------------------------------------------------------------
                 CALL tilt_tensor(tout%mat)
-                
+                CALL check_sym(tout%mat, sym)
+
                 tout%dmn = tin%dmn
                 tout%doa_zener = doa_zener(tout%mat)
                 tout%doa_gebert = doa_gebert(tout%mat)
                 tout%density = gebert_density_voigt(tout%mat, bone%E, bone%nu)
+                tout%sym = sym
 
             END DO
 

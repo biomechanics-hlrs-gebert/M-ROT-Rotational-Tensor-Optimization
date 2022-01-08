@@ -18,15 +18,10 @@ USE math
 
 IMPLICIT NONE
 
-INTERFACE write_matrix
-  MODULE PROCEDURE write_matrix_int
-  MODULE PROCEDURE write_matrix_real 
-END INTERFACE write_matrix
-
 CONTAINS
 
 !------------------------------------------------------------------------------
-! SUBROUTINE: write_matrix_real
+! SUBROUTINE: write_matrix
 !------------------------------------------------------------------------------  
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
@@ -43,25 +38,30 @@ CONTAINS
 !
 !> @param[in] fh Handle of file to print to
 !> @param[in] name Name of the object to print
-!> @param[in] fmt Formatting of the data
-!> @param[in] unit Physical unit of the information to print
 !> @param[in] mat Actual matrix
+!> @param[in] fmti Formatting of the data
+!> @param[in] unit Physical unit of the information to print
 !------------------------------------------------------------------------------
-SUBROUTINE write_matrix_real(fh, name, fmt, unit, mat)
+SUBROUTINE write_matrix(fh, name, mat, fmti, unit)
 
 INTEGER(KIND=INT64), INTENT(IN) :: fh   
 CHARACTER(LEN=*), INTENT(IN) :: name 
-REAL   (KIND=rk), DIMENSION(:, :), INTENT(IN) :: mat    
-CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: fmt 
+REAL   (KIND=rk), INTENT(IN), DIMENSION(:, :) :: mat    
+CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: fmti 
 CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: unit 
 
 ! Internal variables 
-INTEGER(KIND=ik)   :: prec , fw, nm_fmt_lngth, ii, jj, kk, dim1, dim2
+INTEGER, DIMENSION(2) :: lb, ub
+INTEGER(KIND=ik)   :: prec , fw, nm_fmt_lngth, ii, jj, kk, dim1, dim2, q
+
 CHARACTER(LEN=mcl) :: fmt_a, sep, nm_fmt
 CHARACTER(LEN=mcl) :: text
 CHARACTER(LEN=mcl) :: fmt_u
+
+REAL(KIND=rk), DIMENSION(:, :), ALLOCATABLE :: matout
 REAL(KIND=rk) :: sym_out
-LOGICAL :: sym_u
+
+LOGICAL :: sym
 
 !------------------------------------------------------------------------------
 ! Initialize and check for presence of the variables
@@ -72,23 +72,28 @@ fmt_u = 'standard'
 mssg = '' 
 text = ''
 
+ALLOCATE(matout(dim1, dim2))
+
 prec = PRECISION(mat)
 fw = prec+8
-sym_u = .FALSE.
+sym = .FALSE.
+
 
 IF (PRESENT(unit)) THEN
     IF (unit /= '') text = " Unit: ("//TRIM(unit)//")"
 END IF
 
-IF (dim1 == dim2) THEN
-    CALL check_sym(INT(fh, KIND=ik), mat, name, sym_out=sym_out)
-    sym_u = .TRUE.
-END IF
+!------------------------------------------------------------------------------
+! Check symmetry
+!------------------------------------------------------------------------------
+IF (dim1 == dim2) sym = .TRUE.
 
+CALL check_sym(mat, sym_out, matout)
+    
 !------------------------------------------------------------------------------
 ! Generate formats
 !------------------------------------------------------------------------------
-IF(PRESENT(fmt)) fmt_u = fmt
+IF(PRESENT(fmti)) fmt_u = fmti
 
 SELECT CASE (TRIM(fmt_u))
    CASE ('std', 'standard')
@@ -111,12 +116,12 @@ SELECT CASE (TRIM(fmt_u))
        WRITE(fh,"(A,A)")TRIM(name),": matrix("
 
        DO kk = 1, dim1 - 1
-          WRITE(fh, fmt_a) mat(kk,:)
+          WRITE(fh, fmt_a) matout(kk,:)
        END DO
 
        WRITE(fmt_a,'(5(A,I0),A)')  "(' [',",dim2-1,"(E",fw,".",prec,"E2,','),E",fw,".",prec,"E2,']);' )"
 
-       WRITE(fh, fmt_a) mat(dim1, :)
+       WRITE(fh, fmt_a) matout(dim1, :)
 END SELECT
 
 IF (nm_fmt_lngth .LT. 1_ik) nm_fmt_lngth = 1_ik
@@ -131,151 +136,45 @@ WRITE(fh, sep)                                    ! Separator
 WRITE(fh, nm_fmt) ' ',TRIM(name), ' ', TRIM(text) ! Named separator
 
 DO ii=1, dim1
-DO jj=1, dim2
+    DO jj=1, dim2
 
-    IF ((sym_u) .AND. (ii==dim1) .AND. (jj==1)) THEN
-        SELECT CASE(fmt_u)
-        CASE('spl', 'simple')
-            WRITE(fh, '(A)', ADVANCE='NO') "symmetric "
-        CASE('std', 'standard')
-            WRITE(fh, '(A)', ADVANCE='NO') "   symmetric           "
-        END SELECT
-
-    ELSE IF ((sym_u) .AND. (ii==dim1) .AND. (jj==2)) THEN
-        IF (ABS(sym_out) <=  10E-08) sym_out = 0._rk
-        WRITE(fh, fmt_a, ADVANCE='NO') sym_out          
-    ELSE
-        IF ((ABS(mat(ii,jj)) >=  10E-08) .AND. ((.NOT. sym_u) .OR. ((sym_u) .AND. (jj .GE. ii)))) THEN 
-            WRITE(fh, fmt_a, ADVANCE='NO') mat (ii,jj)
-        ELSE
+        IF ((sym) .AND. (ii==dim1) .AND. (jj==1)) THEN
             SELECT CASE(fmt_u)
             CASE('spl', 'simple')
-                WRITE(fh, '(A)', ADVANCE='NO') "      .   "
+                WRITE(fh, '(A)', ADVANCE='NO') "sym /= (%)"
             CASE('std', 'standard')
-                WRITE(fh, '(A)', ADVANCE='NO') "   .                   "
+                WRITE(fh, '(A)', ADVANCE='NO') "   sym /= (%)          "
             END SELECT
-        END IF
-    END IF
 
-END DO
-WRITE(fh,'(A)') ''
-END DO        
+        ELSE IF ((sym) .AND. (ii==dim1) .AND. (jj==2)) THEN
+            !------------------------------------------------------------------------------
+            ! Numbers are returned = 0._rk, but formatting is special here.
+            !------------------------------------------------------------------------------
+            IF (ABS(sym_out) <=  num_zero) THEN
+                sym_out = 0._rk
+            END IF
 
-WRITE(fh, '(A)') ''                               ! Newline & Carriage return
-End Subroutine write_matrix_real
-
-
-!------------------------------------------------------------------------------
-! SUBROUTINE: write_matrix_int
-!------------------------------------------------------------------------------  
-!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
-!> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
-!
-!> @brief
-!> Subroutine to print regular tensors respectively matrices.
-!
-!> @Description
-!> Please provide mat_real OR mat_in :-)
-!> Accepted formats: 'std'/'standard' for scientific formatting and
-!> 'spl'/'simple' for traditional formatting
-!
-!> @param[in] fh Handle of file to print to
-!> @param[in] name Name of the object to print
-!> @param[in] fmt Formatting of the data
-!> @param[in] unit Physical unit of the information to print
-!> @param[in] mat Actual matrix
-!------------------------------------------------------------------------------
-SUBROUTINE write_matrix_int(fh, name, fmt, unit, mat)
-
-INTEGER(KIND=INT64), INTENT(IN) :: fh   
-CHARACTER(LEN=*), INTENT(IN) :: name 
-INTEGER(KIND=INT64), DIMENSION(:, :), INTENT(IN) :: mat    
-CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: fmt 
-CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: unit 
-
-! Internal variables 
-INTEGER(KIND=ik)   :: nm_fmt_lngth, ii, jj, dim1, dim2
-CHARACTER(LEN=mcl) :: fmt_a, sep, nm_fmt
-CHARACTER(LEN=mcl) :: text
-CHARACTER(LEN=mcl) :: fmt_u
-REAL(KIND=rk) :: sym_out
-LOGICAL :: sym_u
-
-!------------------------------------------------------------------------------
-! Initialize and check for presence of the variables
-!------------------------------------------------------------------------------
-dim1 = SIZE(mat, 1)
-dim2 = SIZE(mat, 2)
-fmt_u = 'standard'
-sym_u = .FALSE.
-mssg='' 
-text = ''
-
-IF (PRESENT(unit)) THEN
-    IF (unit /= '') text = " Unit: ("//TRIM(unit)//")"
-END IF
-
-IF (dim1 == dim2) THEN
-    ! ik for file handle required to support different standard iks.
-    CALL check_sym(INT(fh, KIND=ik), REAL(mat, KIND=rk), name, sym_out=sym_out)
-    sym_u = .TRUE.
-END IF
-
-!------------------------------------------------------------------------------
-! Generate formats
-!------------------------------------------------------------------------------
-IF(PRESENT(fmt)) fmt_u = fmt
-
-SELECT CASE (TRIM(fmt_u))
-   CASE ('std', 'standard')
-
-        WRITE(sep, "(A,I0,A)") "(",dim2,"('-'))"
-
-        ! Calculate text and unit length. If name to long - overflow formatting to the right
-        nm_fmt_lngth = dim2-4-2-LEN_TRIM(name)-LEN_TRIM(text)
-
-   CASE ('spl', 'simple')
-
-        WRITE(sep, "(A,I0,A)") "(",dim2*10,"('-'))"        
-
-        ! Calculate text and unit length. If name to long - overflow formaming to the right
-        nm_fmt_lngth  = dim2*10-4-LEN_TRIM(name)-LEN_TRIM(text) 
-END SELECT
-
-IF (nm_fmt_lngth .LT. 1_ik) nm_fmt_lngth = 1_ik
-WRITE(nm_fmt, "(A,I0,A)")  "(2('-') ,3A,", nm_fmt_lngth ,"('-'), A)"    
-
-WRITE(fmt_a, "(3(A,I0),A)") "(",dim2,"(I10))"
-
-!------------------------------------------------------------------------------
-! Write output
-!------------------------------------------------------------------------------
-WRITE(fh, sep)                                    ! Separator
-WRITE(fh, nm_fmt) ' ',TRIM(name), ' ', TRIM(text) ! Named separator
-
-DO ii=1, dim1
-DO jj=1, dim2
-
-    IF ((sym_u) .AND. (ii==dim1) .AND. (jj==1)) THEN
-        WRITE(fh, '(A)', ADVANCE='NO') " symmetric"
-    ELSE IF ((sym_u) .AND. (ii==dim1) .AND. (jj==2)) THEN
-        IF (ABS(sym_out) <=  10E-08) sym_out = 0._rk
-        WRITE(fh, fmt_a, ADVANCE='NO') sym_out          
-    ELSE
-        IF ((mat(ii,jj) /= 0) .AND. ((.NOT. sym_u) .OR. ((sym_u) .AND. (jj .GE. ii)))) THEN 
-            WRITE(fh, fmt_a, ADVANCE='NO') mat (ii,jj)
+            WRITE(fh, fmt_a, ADVANCE='NO') sym_out          
         ELSE
-            WRITE(fh, '(A)', ADVANCE='NO') "         ."
+            IF ((ABS(matout(ii,jj)) >=  num_zero) .AND. ((.NOT. sym) .OR. ((sym) .AND. (jj .GE. ii)))) THEN 
+                WRITE(fh, fmt_a, ADVANCE='NO') matout (ii,jj)
+            ELSE
+                SELECT CASE(fmt_u)
+                CASE('spl', 'simple')
+                    WRITE(fh, '(A)', ADVANCE='NO') "      .   "
+                CASE('std', 'standard')
+                    WRITE(fh, '(A)', ADVANCE='NO') "   .                   "
+                END SELECT
+            END IF
         END IF
-    END IF
 
-END DO
-WRITE(fh,'(A)') ''
+    END DO
+
+    WRITE(fh,'(A)') ''
 END DO        
 
-WRITE(fh, '(A)') ''
-End Subroutine write_matrix_int
-
+WRITE(fh, '(A)') '' ! Newline & Carriage return
+END SUBROUTINE write_matrix
 
 !------------------------------------------------------------------------------
 ! SUBROUTINE: underscore_to_blank
@@ -325,7 +224,7 @@ abort = .FALSE.
 
 CALL parse(TRIM(ADJUSTL(header)), ",", args=tokens, nargs=ntokens)
 
-IF(ntokens /= 43_ik) abort = .TRUE.
+IF(ntokens /= 44_ik) abort = .TRUE.
 
 !------------------------------------------------------------------------------
 ! Implementation might look silly. But calculating the indices during runtime, 
@@ -336,45 +235,46 @@ IF(TRIM(ADJUSTL(tokens( 1))) /= "Domain")     abort = .TRUE.
 IF(TRIM(ADJUSTL(tokens( 2))) /= "Density")    abort = .TRUE.
 IF(TRIM(ADJUSTL(tokens( 3))) /= "DoA_Zener")  abort = .TRUE.
 IF(TRIM(ADJUSTL(tokens( 4))) /= "DoA_Gebert") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 5))) /= "pos_alpha")  abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 6))) /= "pos_eta")    abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 7))) /= "pos_phi")    abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 8))) /= "S11") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 9))) /= "S21") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(10))) /= "S31") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(11))) /= "S41") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(12))) /= "S51") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(13))) /= "S61") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(14))) /= "S12") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(15))) /= "S22") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(16))) /= "S32") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(17))) /= "S42") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(18))) /= "S52") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(19))) /= "S62") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(20))) /= "S13") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(21))) /= "S23") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(22))) /= "S33") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(23))) /= "S43") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(24))) /= "S53") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(25))) /= "S63") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(26))) /= "S14") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(27))) /= "S24") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(28))) /= "S34") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(29))) /= "S44") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(30))) /= "S54") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(31))) /= "S64") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(32))) /= "S15") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(33))) /= "S25") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(34))) /= "S35") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(35))) /= "S45") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(36))) /= "S55") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(37))) /= "S65") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(38))) /= "S16") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(39))) /= "S26") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(40))) /= "S36") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(41))) /= "S46") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(42))) /= "S56") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(43))) /= "S66") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 5))) /= "Sym_dev")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 6))) /= "pos_alpha")  abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 7))) /= "pos_eta")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 8))) /= "pos_phi")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 9))) /= "S11") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(10))) /= "S21") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(11))) /= "S31") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(12))) /= "S41") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(13))) /= "S51") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(14))) /= "S61") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(15))) /= "S12") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(16))) /= "S22") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(17))) /= "S32") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(18))) /= "S42") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(19))) /= "S52") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(20))) /= "S62") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(21))) /= "S13") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(22))) /= "S23") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(23))) /= "S33") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(24))) /= "S43") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(25))) /= "S53") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(26))) /= "S63") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(27))) /= "S14") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(28))) /= "S24") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(29))) /= "S34") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(30))) /= "S44") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(31))) /= "S54") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(32))) /= "S64") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(33))) /= "S15") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(34))) /= "S25") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(35))) /= "S35") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(36))) /= "S45") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(37))) /= "S55") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(38))) /= "S65") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(39))) /= "S16") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(40))) /= "S26") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(41))) /= "S36") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(42))) /= "S46") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(43))) /= "S56") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(44))) /= "S66") abort = .TRUE.
 
 END SUBROUTINE check_tensor_2nd_rank_R66_header
 
@@ -402,6 +302,7 @@ WRITE(fh, '(A)', ADVANCE='NO')  "Domain, "
 WRITE(fh, '(A)', ADVANCE='NO')  "Density, "
 WRITE(fh, '(A)', ADVANCE='NO')  "DoA_Zener, "
 WRITE(fh, '(A)', ADVANCE='NO')  "DoA_Gebert, "
+WRITE(fh, '(A)', ADVANCE='NO')  "Sym_dev, "
 WRITE(fh, '(A)', ADVANCE='NO')  "pos_alpha, "
 WRITE(fh, '(A)', ADVANCE='NO')  "pos_eta, "
 WRITE(fh, '(A)', ADVANCE='NO')  "pos_phi, "
@@ -473,7 +374,7 @@ invalid = .FALSE.
 
 CALL parse(TRIM(ADJUSTL(row)), ",", args=tokens, nargs=ntokens)
 
-IF(ntokens /= 43_ik) invalid = .TRUE.
+IF(ntokens /= 44_ik) invalid = .TRUE.
 
 !------------------------------------------------------------------------------
 ! Required, even if row is invalid. Does not check whether tokens(1) actually
@@ -495,12 +396,13 @@ ELSE
     READ(tokens(2), '(F39.10)') tensor_of_row%density
     READ(tokens(3), '(F39.10)') tensor_of_row%doa_zener
     READ(tokens(4), '(F39.10)') tensor_of_row%doa_gebert
+    READ(tokens(5), '(F39.10)') tensor_of_row%sym
 
     DO ii=1, 3
-        READ(tokens(4_ik + ii), '(F39.10)') tensor_of_row%pos(ii)
+        READ(tokens(5_ik + ii), '(F39.10)') tensor_of_row%pos(ii)
     END DO
 
-    tkn = 8_ik
+    tkn = 9_ik
     DO jj=1, 6
         DO ii=1, 6
             READ(tokens(tkn), '(F39.10)') tensor_of_row%mat(ii, jj)
@@ -528,19 +430,23 @@ INTEGER(KIND=ik), INTENT(IN) :: fh
 TYPE(tensor_2nd_rank_R66), INTENT(IN) :: tensor_of_row
 
 INTEGER(KIND=ik) :: ii, jj
+CHARACTER(Len=*), PARAMETER :: FINT = "(I0, A)"
+CHARACTER(Len=*), PARAMETER :: FREAL = "(F0.10, A)"
 
-WRITE(fh, '(I0    , A)', ADVANCE='NO') tensor_of_row%dmn, ", "
-WRITE(fh, '(F30.15, A)', ADVANCE='NO') tensor_of_row%density, ", "
-WRITE(fh, '(F30.15, A)', ADVANCE='NO') tensor_of_row%doa_zener, ", "
-WRITE(fh, '(F30.15, A)', ADVANCE='NO') tensor_of_row%doa_gebert, ", "
+
+WRITE(fh, FINT, ADVANCE='NO') tensor_of_row%dmn, ", "
+WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%density, ", "
+WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%doa_zener, ", "
+WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%doa_gebert, ", "
+WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%sym, ", "
 
 DO ii=1, 3
-    WRITE(fh, '(F30.15, A)', ADVANCE='NO') tensor_of_row%pos(ii), ", "
+    WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%pos(ii), ", "
 END DO
 
 DO jj=1, 6
     DO ii=1, 6
-        WRITE(fh, '(F30.15, A)', ADVANCE='NO') tensor_of_row%mat(ii,jj), ", "
+        WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%mat(ii,jj), ", "
     END DO
 END DO
 !------------------------------------------------------------------------------

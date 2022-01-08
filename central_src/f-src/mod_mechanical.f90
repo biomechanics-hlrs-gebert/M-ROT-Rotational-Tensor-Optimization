@@ -24,6 +24,7 @@ TYPE tensor_2nd_rank_R66
    REAL(KIND=rk) :: density    ! Percentage of monolothic young modulus
    REAL(KIND=rk) :: doa_zener  ! Degree of anisotropy
    REAL(KIND=rk) :: doa_gebert ! Degree of anisotropy
+   REAL(KIND=rk) :: sym        ! Symmetry deviation (quotient)
    REAL(KIND=rk), DIMENSION(3)   :: pos = 0._rk ! Positioon (deg) of alpha, eta, phi
    REAL(KIND=rk), DIMENSION(6,6) :: mat = 0._rk
 END TYPE tensor_2nd_rank_R66
