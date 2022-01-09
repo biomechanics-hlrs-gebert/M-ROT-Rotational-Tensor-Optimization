@@ -48,10 +48,10 @@ SUBROUTINE write_criteria_space_to_vtk(file)
 
     ttl_steps = (pm_steps*2_ik)+1_ik
 
-    CALL write_vtk_struct_points_header(fh, file, TRIM('rk8'), &
+    CALL write_vtk_struct_points_header(fh, file, TRIM('rk4'), &
         [1._rk, 1._rk, 1._rk], [0._rk, 0._rk, 0._rk], ttl_steps)
 
-    CALL ser_write_raw(fh, file, crit)
+    CALL ser_write_raw(fh, file, REAL(crit, KIND=REAL32))
 
     CALL write_vtk_struct_points_footer(fh, file)
 
@@ -239,20 +239,18 @@ IF(my_rank == 0) THEN
     CALL meta_handle_lock_file(restart, restart_cmd_arg)
 
     !------------------------------------------------------------------------------
-    ! Spawn a log and a monitoring file (to check the behavior of MPI)
+    ! Spawn a monitoring file (to check the behavior of MPI)
     !------------------------------------------------------------------------------
-    CALL meta_start_ascii(fh_log, log_suf)
-    
-    IF(debug >= 0) CALL meta_start_ascii(fh_mon, mon_suf)
+    CALL meta_start_ascii(fh_mon, mon_suf)
 
     CALL DATE_AND_TIME(date, time)
 
-    WRITE(fh_log, FMT_TXT_SEP)  
-    WRITE(fh_log, FMT_TXT)      TRIM(ADJUSTL(longname))//" Results"
-    WRITE(fh_log, FMT_TXT)     "Date: "//date//" [ccyymmdd]"
-    WRITE(fh_log, FMT_TXT)     "Time: "//time//" [hhmmss.sss]"
-    WRITE(fh_log, FMT_TXT_SEP)  
-    WRITE(fh_log, FMT_MSG_xAI0) "Processors:", size_mpi  
+    WRITE(fh_mon, FMT_TXT_SEP)  
+    WRITE(fh_mon, FMT_TXT)      TRIM(ADJUSTL(longname))//" Results"
+    WRITE(fh_mon, FMT_TXT)     "Date: "//date//" [ccyymmdd]"
+    WRITE(fh_mon, FMT_TXT)     "Time: "//time//" [hhmmss.sss]"
+    WRITE(fh_mon, FMT_TXT_SEP)  
+    WRITE(fh_mon, FMT_MSG_xAI0) "Processors:", size_mpi  
     
     !------------------------------------------------------------------------------
     ! Create/Open tensor files. Basically tuned csv data.
@@ -641,7 +639,7 @@ ELSE
                         CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
 
                         CALL print_err_stop(std_out, &
-                            "Removing a the file "//TRIM(crit_file)//" failed.", iostat)
+                            "Removing the file "//TRIM(crit_file)//" failed.", iostat)
                     ELSE
                         CALL print_err_stop(std_out, &
                             "File "//TRIM(crit_file)//" exists and restart is 'N'.", iostat)
@@ -707,8 +705,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     CALL meta_close()
 
-    CALL meta_stop_ascii(fh_log, log_suf)
-    IF(debug >= 0) CALL meta_stop_ascii(fh_mon, mon_suf)
+    CALL meta_stop_ascii(fh_mon, mon_suf)
 
     IF(std_out/=6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
 

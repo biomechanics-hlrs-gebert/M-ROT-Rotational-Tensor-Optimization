@@ -64,7 +64,7 @@ mpirun ./bin/roto_v1.0.0_x86_64 -np 4  ./bin/roto_v4.0.0_x86_64 ./datasets/SC00-
 ### Datasets
 ... are transfered via file exchange and are not pushed into the repository. 
 
-#### \*.stte.\* data
+#### \*.stte.\*, Stiffness Tensor Data
 The 2nd rank R6x6 stiffness tensors (i.e., stiffness matrices) are store in files with the filename nomenclature:
 ```
 path/basename.stte.<state>
