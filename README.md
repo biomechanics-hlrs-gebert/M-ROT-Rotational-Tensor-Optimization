@@ -34,13 +34,13 @@ Parallelization of the program is done with an API called MPI (Message Passing I
 
 Required: MPI - compiled with integer 4 and mpi_f08.
 
-  1. [Open-mpi 4.1.0](https://www.open-mpi.org/software/ompi/v4.1/) on local systems. Other versions are not tested.
+  1. [Open-mpi 4.1.2](https://www.open-mpi.org/software/ompi/v4.1/) on local systems. Other versions are not tested.
   2. [HPE-MPT on HLRS Hawk](https://kb.hlrs.de/platforms/index.php/MPI(Hawk))
 
 The program may be ported to other architectures. Maybe not :-)
 
 ## Build
-It's tested and therefore recommended to build and run the program as follows.
+It's tested and recommended to build and run the program as follows. For developing the program on a laptop, "Julius" is the appropriate system.
 ### Set up the Environment
 ```vim ./central_src/auxiliaries/system_environments/<system>.sh```
 ```source ./environment.sh <system>``` 
@@ -59,7 +59,7 @@ Create documentation: ```make docs```
 ## Usage
 For example for testing on julius:
 ```
-mpirun ./bin/roto_v1.0.0_x86_64 -np 4  ./bin/roto_v4.0.0_x86_64 ./datasets/SC00-0_tc_Dev_ctif_G3S11Sig10.meta
+mpirun ./bin/roto_v1.0.0_x86_64 -np 4 ./datasets/SC00-0_tc_Dev_ctif_G3S11Sig10.meta
 ```
 ### Datasets
 ... are transfered via file exchange and are not pushed into the repository. 
