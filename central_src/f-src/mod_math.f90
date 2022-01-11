@@ -212,36 +212,20 @@ End Function tra_R6
 !
 !> @param[in]  matin Input Matrix
 !> @param[out] matout Output Matrix
-!> @param[out] sym Sum of differences of all ii,jj entries
 !------------------------------------------------------------------------------  
-SUBROUTINE check_sym(matin, sym, matout)
+SUBROUTINE check_sym(matin, sym)
 
 REAL(KIND=rk), DIMENSION(:,:), INTENT(IN)  :: matin
 REAL(KIND=rk)                , INTENT(OUT) :: sym
-REAL(KIND=rk), DIMENSION(:,:), INTENT(OUT), OPTIONAL :: matout
 
 ! INTEGER, DIMENSION(2) :: lb, ub
 INTEGER(KIND=ik) :: ii, jj
 REAL(KIND=rk) :: cummu, entry_counter
 
-! lb = LBOUND(matin)
-! ub = UBOUND(matin)
-
-! ALLOCATE(matout(lb(1), ub(2)))
-! matout = 0._rk
-
 !------------------------------------------------------------------------------
 ! Calculate the differences to get the information of symmetry
 ! Earlier version...
 !------------------------------------------------------------------------------
-! sym = 0._rk
-
-! DO jj = lb(2), ub(2)
-!     DO ii = lb(1), ub(1)
-!         sym = sym + ABS(matin(ii,jj) -  matin(jj,ii))
-    ! END DO
-! END DO
-
 cummu = 0._rk
 ii=1_ik
 entry_counter = 0._rk
@@ -266,11 +250,6 @@ END DO
 ! 1 - sym quotient to compare to 0
 !------------------------------------------------------------------------------
 sym = 1._rk - (cummu / entry_counter)
-
-!------------------------------------------------------------------------------
-! Write matout
-!------------------------------------------------------------------------------
-IF(PRESENT(matout)) matout = matin 
 
 END SUBROUTINE check_sym
 

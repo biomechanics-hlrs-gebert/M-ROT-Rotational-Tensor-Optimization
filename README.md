@@ -16,28 +16,13 @@ For use with previously used data sets:
 cat ./datasets/M-ROTO.meta.template >> Your_Meta_File.meta
 ```
 
-## [semantic versioning](https://semver.org):
-
-Given a version number MAJOR.MINOR.PATCH, increment the:
-
-* MAJOR version when you major Features (i.e. new way of image processing),
-* MINOR version when you extend functionality (i.e. new kernels), and
-* PATCH version when you make bug fixes.
-
 ## Requirements
 * x86 64bit Hardware
-* Linux x86 64Bit Installation with a Bash
+* Linux x86 64Bit with Bash
 * GNU Compiler Collection (GCC)
 * An installation of Open-MPI
-### Message Passing Interface 
-Parallelization of the program is done with an API called MPI (Message Passing Interface).
 
-Required: MPI - compiled with integer 4 and mpi_f08.
-
-  1. [Open-mpi 4.1.2](https://www.open-mpi.org/software/ompi/v4.1/) on local systems. Other versions are not tested.
-  2. [HPE-MPT on HLRS Hawk](https://kb.hlrs.de/platforms/index.php/MPI(Hawk))
-
-The program may be ported to other architectures. Maybe not :-)
+The installation of Open MPI can be done by the install script in the repository "Overview" of the biomechanics-hlrs-gebert organization @GitHub.
 
 ## Build
 It's tested and recommended to build and run the program as follows. For developing the program on a laptop, "Julius" is the appropriate system.

@@ -51,14 +51,12 @@ CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: fmti
 CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: unit 
 
 ! Internal variables 
-INTEGER, DIMENSION(2) :: lb, ub
-INTEGER(KIND=ik)   :: prec , fw, nm_fmt_lngth, ii, jj, kk, dim1, dim2, q
+INTEGER(KIND=ik)   :: prec , fw, nm_fmt_lngth, ii, jj, kk, dim1, dim2
 
 CHARACTER(LEN=mcl) :: fmt_a, sep, nm_fmt
 CHARACTER(LEN=mcl) :: text
 CHARACTER(LEN=mcl) :: fmt_u
 
-REAL(KIND=rk), DIMENSION(:, :), ALLOCATABLE :: matout
 REAL(KIND=rk) :: sym_out
 
 LOGICAL :: sym
@@ -88,7 +86,7 @@ END IF
 !------------------------------------------------------------------------------
 IF (dim1 == dim2) sym = .TRUE.
 
-CALL check_sym(mat, sym_out, matout)
+CALL check_sym(mat, sym_out)
     
 !------------------------------------------------------------------------------
 ! Generate formats
@@ -156,8 +154,9 @@ DO ii=1, dim1
 
             WRITE(fh, fmt_a, ADVANCE='NO') sym_out          
         ELSE
-            IF ((ABS(matout(ii,jj)) >=  num_zero) .AND. ((.NOT. sym) .OR. ((sym) .AND. (jj .GE. ii)))) THEN 
-                WRITE(fh, fmt_a, ADVANCE='NO') matout (ii,jj)
+            IF ((ABS(mat(ii,jj)) >=  num_zero) .AND. ((.NOT. sym) .OR. ((sym) .AND. (jj .GE. ii)))) THEN 
+                WRITE(fh, fmt_a, ADVANCE='NO') mat (ii,jj)
+
             ELSE
                 SELECT CASE(fmt_u)
                 CASE('spl', 'simple')
