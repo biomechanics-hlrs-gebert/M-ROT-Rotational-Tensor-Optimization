@@ -13,9 +13,11 @@ USE global_std
 USE strings
 
 IMPLICIT NONE
+
 REAL(KIND=rk), PARAMETER :: num_zero   = 1.E-9
 REAL(KIND=rk), PARAMETER :: sq2        = sqrt(2._rk)
-REAL(KIND=rk), PARAMETER :: pi         = 4.D0*DATAN(1.D0) !acos(-1._rk)
+REAL(KIND=rk), PARAMETER :: pi         = 4.D0*DATAN(1.D0)       !acos(-1._rk)
+REAL(KIND=rk), PARAMETER :: pihalf     = 4.D0*DATAN(1.D0)/2._rk !acos(-1._rk)
 REAL(KIND=rk), PARAMETER :: inv180     = 1._rk/180._rk
 REAL(KIND=rk), PARAMETER :: pi_div_180 = acos(-1._rk)/180._rk
 
@@ -34,21 +36,63 @@ END INTERFACE zero_thres
 CONTAINS
 
 !------------------------------------------------------------------------------
+! SUBROUTINE: transpose_mat
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief
+!> Spatially transpose a R6x6 matrix (2nd rank tensor).
+!
+!> @param[in] tensor_in Input tensor
+!> @param[in] pos_in Requested combination of euler angles.
+!> @param[out] tensor_out Output tensor
+!------------------------------------------------------------------------------
+SUBROUTINE transpose_mat (tensor_in, pos_in, tensor_out)
+
+     REAL(KIND=rk), DIMENSION(6,6), INTENT(IN)  :: tensor_in
+     REAL(KIND=rk), DIMENSION(3)  , INTENT(IN)  :: pos_in
+     REAL(KIND=rk), DIMENSION(6,6), INTENT(OUT) :: tensor_out
+
+     REAL(KIND=rk)                 :: alpha, phi, eta
+     REAL(KIND=rk), DIMENSION(3)   :: n
+     REAL(KIND=rk), DIMENSION(3,3) :: aa
+     REAL(KIND=rk), DIMENSION(6,6) :: BB
+
+     !------------------------------------------------------------------------------
+     !  Degrees as input, radian as output to sin/cos
+     !------------------------------------------------------------------------------
+     alpha = REAL(pos_in(1)) * pi / 180._rk
+     phi   = REAL(pos_in(2)) * pi / 180._rk
+     eta   = REAL(pos_in(3)) * pi / 180._rk
+
+     n = [ COS(phi)*SIN(eta), SIN(phi)*SIN(eta), COS(eta) ]
+
+     n = n / SQRT(SUM(n*n))
+
+     aa = rot_alg(n, alpha)
+
+     BB = tra_R6(aa)
+
+     tensor_out = MATMUL(MATMUL(TRANSPOSE(BB), tensor_in), BB)
+
+END SUBROUTINE transpose_mat
+
+!------------------------------------------------------------------------------
 ! FUNCTION: rot_x
 !------------------------------------------------------------------------------  
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
 !
-!> @param[in] alpha Angle
+!> @param[in] angle Angle
 !> @return[out] aa Output transformation matrix
 !------------------------------------------------------------------------------  
-Function rot_x(alpha) Result(aa)
+Function rot_x(angle) Result(aa)
 
-    Real(kind=rk), intent(in) :: alpha
+    Real(kind=rk), intent(in) :: angle
     Real(kind=rk), Dimension(3,3) :: aa
 
     aa(1,:) = [ 1._rk ,   0._rk    ,   0._rk     ]
-    aa(2,:) = [ 0._rk , cos(alpha) , -sin(alpha) ]
-    aa(3,:) = [ 0._rk , sin(alpha) ,  cos(alpha) ]
+    aa(2,:) = [ 0._rk , cos(angle) , -sin(angle) ]
+    aa(3,:) = [ 0._rk , sin(angle) ,  cos(angle) ]
 
 End Function rot_x
 
@@ -57,17 +101,17 @@ End Function rot_x
 !------------------------------------------------------------------------------  
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
 !
-!> @param[in] alpha Angle
+!> @param[in] angle Angle
 !> @return[out] aa Output transformation matrix
 !------------------------------------------------------------------------------  
-Function rot_y(alpha) Result(aa)
+Function rot_y(angle) Result(aa)
 
-    Real(kind=rk), intent(in) :: alpha
+    Real(kind=rk), intent(in) :: angle
     Real(kind=rk), Dimension(3,3) :: aa
 
-    aa(1,:) = [ cos(alpha), 0._rk,  sin(alpha) ]
+    aa(1,:) = [ cos(angle), 0._rk,  sin(angle) ]
     aa(2,:) = [   0._rk   , 1._rk,   0._rk     ]
-    aa(3,:) = [-sin(alpha), 0._rk,  cos(alpha) ]
+    aa(3,:) = [-sin(angle), 0._rk,  cos(angle) ]
 
 End Function rot_y
 
@@ -76,16 +120,16 @@ End Function rot_y
 !------------------------------------------------------------------------------  
 !> @author Ralf Schneider - HLRS - NUM - schneider@hlrs.de
 !
-!> @param[in] alpha Angle
+!> @param[in] angle Angle
 !> @return[out] aa Output transformation matrix
 !------------------------------------------------------------------------------  
-Function rot_z(alpha) Result(aa)
+Function rot_z(angle) Result(aa)
 
-    Real(kind=rk), intent(in) :: alpha
+    Real(kind=rk), intent(in) :: angle
     Real(kind=rk), Dimension(3,3) :: aa
 
-    aa(1,:) = [ cos(alpha), -sin(alpha), 0._rk ]
-    aa(2,:) = [ sin(alpha),  cos(alpha), 0._rk ]
+    aa(1,:) = [ cos(angle), -sin(angle), 0._rk ]
+    aa(2,:) = [ sin(angle),  cos(angle), 0._rk ]
     aa(3,:) = [   0._rk   ,   0._rk    , 1._rk ]
 
 End Function rot_z
@@ -161,82 +205,52 @@ End Function tra_R6
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !
 !> @brief
-!> Check the symmetry of an arbitrarily sized square matrix.
+!> Check the symmetry of an arbitrarily sized matrix.
 !
 !> @Description
-!> Evaluates the symmetry of the matrix dependent of the quotient of 
-!> the L2-Norm of the subtracted minor diagonals devided by the 
-!> L2-norm of the input matrix
+!> Average percentage of deviation of minor diagonals.
 !
-!> @param[in]  fh File handle to write to
-!> @param[in]  mi Input Matrix
-!> @param[in]  name Name of the matrix to evaluate
-!> @param[out] mo Output Matrix
-!> @param[out] sym_out Sum of differences of all ii,jj entries
+!> @param[in]  matin Input Matrix
+!> @param[out] matout Output Matrix
 !------------------------------------------------------------------------------  
-SUBROUTINE check_sym(fh, mi, name, mo, sym_out)
+SUBROUTINE check_sym(matin, sym)
 
-INTEGER(KIND=ik),              INTENT(IN) :: fh
-REAL(KIND=rk), DIMENSION(:,:), INTENT(IN) :: mi
-CHARACTER(LEN=*),              INTENT(IN) , OPTIONAL :: name
-REAL(KIND=rk), DIMENSION(:,:), INTENT(OUT), OPTIONAL :: mo
-REAL(KIND=rk)                , INTENT(OUT), OPTIONAL :: sym_out
+REAL(KIND=rk), DIMENSION(:,:), INTENT(IN)  :: matin
+REAL(KIND=rk)                , INTENT(OUT) :: sym
 
-REAL(KIND=rk), DIMENSION(:,:), ALLOCATABLE :: mat 
-REAL(KIND=rk) :: sym 
-INTEGER, DIMENSION(2) :: lb, ub
-INTEGER(KIND=ik) :: ii, jj, q
-CHARACTER(LEN=scl) :: name_u, sym_out_str
-
-name_u = ''
-
-lb = LBOUND(mi)
-ub = UBOUND(mi)
-
-ALLOCATE(mat(lb(1), ub(2)))
-mat = 0._rk
+! INTEGER, DIMENSION(2) :: lb, ub
+INTEGER(KIND=ik) :: ii, jj
+REAL(KIND=rk) :: cummu, entry_counter
 
 !------------------------------------------------------------------------------
 ! Calculate the differences to get the information of symmetry
+! Earlier version...
 !------------------------------------------------------------------------------
-sym = 0._rk
 
-Do jj = lb(2), ub(2)
-    DO ii = lb(1), ub(1)
-        sym = sym + ABS(mi(ii,jj) -  mi(jj,ii))
-    End DO
-End Do
+cummu = 0._rk
+ii=1_ik
+entry_counter = 0._rk
+DO WHILE (ii < SIZE(matin, DIM=1))
+ 
+    jj=2_ik
+    DO WHILE (jj <= SIZE(matin, DIM=2))
+        cummu = cummu + (matin(ii,jj) /  matin(jj,ii))  
 
-IF(PRESENT(sym_out)) sym_out = sym
+        !------------------------------------------------------------------------------
+        ! How many entries are averaged?
+        !------------------------------------------------------------------------------
+        entry_counter = entry_counter + 1._rk     
 
-!------------------------------------------------------------------------------
-! Write matrix out with zeros to show check_sym
-! q counts the rows/columns to suppress a half of the matrix
-!------------------------------------------------------------------------------
-mat = mi
-IF(sym <= 10E-06) THEN
-    q = 1
-    DO jj=lb(2), ub(2)-1 ! columns
-        q = q + 1 ! begins with 2
-        DO ii=lb(1), ub(2) ! rows
-            mat (ii,jj) = 0._rk
-        END DO
+        jj = jj + 1_ik
     END DO
-END IF
 
-IF(PRESENT(mo)) mo = mat
-DEALLOCATE(mat)
-
-IF(PRESENT(name)) name_u = ' '//TRIM(ADJUSTL(name))
+    ii = ii + 1_ik
+END DO
 
 !------------------------------------------------------------------------------
-! Format output
+! 1 - sym quotient to compare to 0
 !------------------------------------------------------------------------------
-WRITE(sym_out_str, '(F40.20)') sym
-
-CALL trimzero(sym_out_str)
-
-WRITE(fh, '(4A)')"-- check_sym",TRIM(name_u),": ", TRIM(ADJUSTL(sym_out_str))
+sym = 1._rk - (cummu / entry_counter)
 
 END SUBROUTINE check_sym
 
