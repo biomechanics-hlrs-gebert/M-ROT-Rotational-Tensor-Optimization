@@ -70,8 +70,6 @@ fmt_u = 'standard'
 mssg = '' 
 text = ''
 
-ALLOCATE(matout(dim1, dim2))
-
 prec = PRECISION(mat)
 fw = prec+8
 sym = .FALSE.
@@ -114,12 +112,12 @@ SELECT CASE (TRIM(fmt_u))
        WRITE(fh,"(A,A)")TRIM(name),": matrix("
 
        DO kk = 1, dim1 - 1
-          WRITE(fh, fmt_a) matout(kk,:)
+          WRITE(fh, fmt_a) mat(kk,:)
        END DO
 
        WRITE(fmt_a,'(5(A,I0),A)')  "(' [',",dim2-1,"(E",fw,".",prec,"E2,','),E",fw,".",prec,"E2,']);' )"
 
-       WRITE(fh, fmt_a) matout(dim1, :)
+       WRITE(fh, fmt_a) mat(dim1, :)
 END SELECT
 
 IF (nm_fmt_lngth .LT. 1_ik) nm_fmt_lngth = 1_ik
