@@ -1,3 +1,3 @@
-CHARACTER(LEN=scl), PARAMETER :: longname = 'Directly Discretizing Tensor Computation'
-CHARACTER(LEN=scl), PARAMETER :: revision = 'v1.0.0'
-CHARACTER(LEN=scl), PARAMETER :: hash = '13b98a05240206cb7d6008cbe25ff64b3a1c9d7c'
+CHARACTER(LEN=scl), PARAMETER :: longname = 'Spatial Image Registration'
+CHARACTER(LEN=scl), PARAMETER :: revision = ''
+CHARACTER(LEN=scl), PARAMETER :: hash = 'ac9f980ad8567a535cf412b030d20a3a25c875fc'
