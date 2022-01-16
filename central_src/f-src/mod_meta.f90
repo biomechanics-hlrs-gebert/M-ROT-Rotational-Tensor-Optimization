@@ -14,6 +14,7 @@ MODULE meta
 
 IMPLICIT NONE
 
+   INTEGER, PARAMETER :: meta_mik = 4
    INTEGER, PARAMETER :: meta_ik = 8
    INTEGER, PARAMETER :: meta_rk = 8
    INTEGER, PARAMETER :: meta_mcl = 512
@@ -179,6 +180,8 @@ CHARACTER(LEN=meta_mcl), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: meta_as_rry
 
 CALL meta_invoke(meta_as_rry)
 CALL meta_continue(meta_as_rry)
+
+CALL meta_write(fhmeo, 'META_PARSED/INVOKED' , 'Now - Date/Time on the right.')
 
 END SUBROUTINE meta_append
 
@@ -459,14 +462,16 @@ ELSE
    ! In case of an existing ascii file, the in%p_n_bsnm is relevant.
    !------------------------------------------------------------------------------
    INQUIRE(FILE = TRIM(in%p_n_bsnm)//TRIM(suf), EXIST=fex)
-   
-   CALL execute_command_line ('cp '//TRIM(in%p_n_bsnm)//TRIM(suf)//' '&
-      //TRIM(out%p_n_bsnm)//TRIM(suf), CMDSTAT=ios)
 
-   IF(ios /= 0_meta_ik) THEN
-      mssg='Can not copy the suffix_file from »'//TRIM(temp_f_suf)//'« to the proper basename.'
-      CALL print_err_stop(std_out, mssg, 0)
-   END IF
+   IF(fex) THEN 
+      CALL execute_command_line ('cp '//TRIM(in%p_n_bsnm)//TRIM(suf)//' '&
+         //TRIM(out%p_n_bsnm)//TRIM(suf), CMDSTAT=ios)
+
+      IF(ios /= 0_meta_ik) THEN
+         mssg='Can not copy the suffix_file from »'//TRIM(temp_f_suf)//'« to the proper basename.'
+         CALL print_err_stop(std_out, mssg, 0)
+      END IF
+   END IF 
 
 END IF
 
@@ -1262,8 +1267,15 @@ SUBROUTINE meta_signing(binary)
 
 CHARACTER(LEN=*), INTENT(IN) :: binary
 
+INTEGER  (KIND=meta_ik) :: ntokens
+CHARACTER(LEN=meta_mcl) :: tokens(30), revision
+
+CALL parse(TRIM(binary), '_', tokens, ntokens)
+
+revision = TRIM(tokens(2))
+
 WRITE(fhmeo, '(A)')
-CALL meta_write(fhmeo, 'PROGRAM_VERSION', revision)
+CALL meta_write(fhmeo, 'PROGRAM_VERSION', TRIM(revision))
 CALL meta_write(fhmeo, 'PROGRAM_GIT_HASH', hash)
 
 CALL meta_write_sha256sum(binary)
@@ -1284,9 +1296,12 @@ END SUBROUTINE meta_signing
 !> @description
 !> provided by a makefile. Furhermore, it requires a global_stds file.
 !------------------------------------------------------------------------------
-SUBROUTINE meta_close()
+SUBROUTINE meta_close(size_mpi)
 
+INTEGER(KIND=meta_mik) :: size_mpi
 LOGICAL :: opened
+
+CALL meta_write(fhmeo, 'PROCESSORS', '(-)', INT(size_mpi, KIND=meta_ik))
 
 WRITE(fhmeo, '(A)')
 WRITE(fhmeo, "(100('-'))")
