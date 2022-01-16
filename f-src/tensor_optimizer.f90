@@ -191,19 +191,6 @@ CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be commited.")
 ! Initialize program itself
 !------------------------------------------------------------------------------
 IF(my_rank == 0) THEN
-
-    !------------------------------------------------------------------------------
-    ! Redirect std_out into a file in case std_out is not useful by environment.
-    ! Place these lines before handle_lock_file :-)
-    !------------------------------------------------------------------------------
-    std_out = determine_stout()
-
-    IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
-
-    CALL show_title()
- 
-    IF(debug >=0) WRITE(*,FMT_MSG) "Post mortem info probably in ./datasets/.temporary.std_out"
-
     CALL CPU_TIME(start)
 
     !------------------------------------------------------------------------------
@@ -211,6 +198,15 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     CALL get_cmd_args(binary, in%full, stp, restart, restart_cmd_arg)
     IF(stp) GOTO 1001
+    
+    IF (in%full=='') THEN
+        CALL usage(binary)    
+
+        !------------------------------------------------------------------------------
+        ! On std_out since file of std_out is not spawned
+        !------------------------------------------------------------------------------
+        CALL print_err_stop(6, "No input file given", 1)
+    END IF
 
     !------------------------------------------------------------------------------
     ! Check and open the input file; Modify the Meta-Filename / Basename
@@ -219,6 +215,21 @@ IF(my_rank == 0) THEN
     global_meta_prgrm_mstr_app = 'roto' 
     global_meta_program_keyword = 'ROT_TENSOR_OPT'
     CALL meta_append(m_rry)
+    
+    !------------------------------------------------------------------------------
+    ! Redirect std_out into a file in case std_out is not useful by environment.
+    ! Place these lines before handle_lock_file :-)
+    !------------------------------------------------------------------------------
+    std_out = determine_stout()
+
+    !------------------------------------------------------------------------------
+    ! Spawn standard out after(!) the basename is known
+    !------------------------------------------------------------------------------
+    IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
+
+    CALL show_title()
+ 
+    IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/.temporary.std_out"
 
     !------------------------------------------------------------------------------
     ! Parse input
@@ -703,7 +714,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Finish the program
     !------------------------------------------------------------------------------
-    CALL meta_close()
+    CALL meta_close(size_mpi)
 
     CALL meta_stop_ascii(fh_mon, mon_suf)
 
