@@ -1,3 +1,2 @@
-CHARACTER(LEN=scl), PARAMETER :: longname = 'Spatial Image Registration'
-CHARACTER(LEN=scl), PARAMETER :: revision = ''
-CHARACTER(LEN=scl), PARAMETER :: hash = '2558ee36b5f5a83ba2423c89566e2a457d366e23'
+CHARACTER(LEN=scl), PARAMETER :: longname = 'X to Meta Converter'
+CHARACTER(LEN=scl), PARAMETER :: hash = '0bea80fa73861eed2f22df2a06df71da63aafdd8'
