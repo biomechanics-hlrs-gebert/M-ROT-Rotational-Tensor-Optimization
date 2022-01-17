@@ -718,8 +718,6 @@ IF(my_rank == 0) THEN
 
     CALL meta_stop_ascii(fh_mon, mon_suf)
 
-    IF(std_out/=6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
-
     CALL CPU_TIME(end)
 
     WRITE(std_out,FMT_TXT_xAF0) 'Overall Time = ', (end-start) / 60._rk ,' Minutes'
@@ -742,6 +740,8 @@ IF(my_rank == 0) THEN
 
     WRITE(std_out,FMT_TXT) 'Program finished.'
     WRITE(std_out,FMT_TXT_SEP)
+
+    IF(std_out/=6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
 
 END IF ! (my_rank == 0)
 
