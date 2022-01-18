@@ -1,11 +1,11 @@
 # HLRS|NUM Dataset Batch Record
 
 * GENERAL_INFORMATION
-* CT_SCAN               PT01s1                                         ! HLRS internal nomenclature
+* CT_SCAN               PT01s1-mu                                      ! HLRS internal nomenclature
 * OWNER                 Johannes_Gebert
 * OWNER_CONTACT         gebert@hlrs.de
 * DATE_CREATED          09.01.2022                                   
-* INTERNAL_ID           Comparison_Validation                          ! Briefly encode what was studied
+* INTERNAL_ID           Proximal_Tibia_Validation_Data                 ! Briefly encode what was studied
 
 * HISTORY               1                                              ! Number of consecutive images within binary data
 * DATA_BYTE_ORDER       Bigendian                                      ! BigEndian, LittleEndian
