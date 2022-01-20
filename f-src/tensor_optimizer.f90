@@ -121,7 +121,7 @@ TYPE(tensor_2nd_rank_R66), DIMENSION(:), ALLOCATABLE :: tlcl_res
 TYPE(materialcard) :: bone
 
 CHARACTER(LEN=mcl), DIMENSION(:), ALLOCATABLE :: m_rry      
-CHARACTER(LEN=mcl) :: crit_file
+CHARACTER(LEN=mcl) :: crit_file, cmd_arg_history=''
 CHARACTER(LEN=scl) :: restart, restart_cmd_arg, re_mono, re_orth, re_ani1, re_ani2
 CHARACTER(LEN=scl) :: suf_covo, suf_mono, suf_orth, suf_ani1, suf_ani2, temp_suf    
 CHARACTER(LEN=scl) :: binary, dmn_no, suffix
@@ -196,7 +196,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Parse the command arguments
     !------------------------------------------------------------------------------
-    CALL get_cmd_args(binary, in%full, stp, restart, restart_cmd_arg)
+    CALL get_cmd_args(binary, in%full, stp, restart_cmd_arg, cmd_arg_history)
     IF(stp) GOTO 1001
     
     IF (in%full=='') THEN
@@ -232,6 +232,12 @@ IF(my_rank == 0) THEN
     IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/.temporary.std_out"
 
     !------------------------------------------------------------------------------
+    ! Restart handling
+    ! Done after meta_io to decide based on keywords
+    !------------------------------------------------------------------------------
+    CALL meta_handle_lock_file(restart, restart_cmd_arg)
+
+    !------------------------------------------------------------------------------
     ! Parse input
     !------------------------------------------------------------------------------
     CALL meta_read(std_out, 'REQUEST_MONO'   , m_rry, re_mono)
@@ -260,6 +266,7 @@ IF(my_rank == 0) THEN
     WRITE(fh_mon, FMT_TXT)      TRIM(ADJUSTL(longname))//" Results"
     WRITE(fh_mon, FMT_TXT)     "Date: "//date//" [ccyymmdd]"
     WRITE(fh_mon, FMT_TXT)     "Time: "//time//" [hhmmss.sss]"
+    WRITE(std_out, FMT_TXT) "Program invocation: "//TRIM(cmd_arg_history)          
     WRITE(fh_mon, FMT_TXT_SEP)  
     WRITE(fh_mon, FMT_MSG_xAI0) "Processors:", size_mpi  
     
