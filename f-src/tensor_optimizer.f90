@@ -229,13 +229,7 @@ IF(my_rank == 0) THEN
 
     CALL show_title()
  
-    IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/.temporary.std_out"
-
-    !------------------------------------------------------------------------------
-    ! Restart handling
-    ! Done after meta_io to decide based on keywords
-    !------------------------------------------------------------------------------
-    CALL meta_handle_lock_file(restart, restart_cmd_arg)
+    IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
 
     !------------------------------------------------------------------------------
     ! Parse input
@@ -263,10 +257,10 @@ IF(my_rank == 0) THEN
     CALL DATE_AND_TIME(date, time)
 
     WRITE(fh_mon, FMT_TXT_SEP)  
-    WRITE(fh_mon, FMT_TXT)      TRIM(ADJUSTL(longname))//" Results"
-    WRITE(fh_mon, FMT_TXT)     "Date: "//date//" [ccyymmdd]"
-    WRITE(fh_mon, FMT_TXT)     "Time: "//time//" [hhmmss.sss]"
-    WRITE(std_out, FMT_TXT) "Program invocation: "//TRIM(cmd_arg_history)          
+    WRITE(fh_mon, FMT_TXT) TRIM(ADJUSTL(longname))//" Results"
+    WRITE(fh_mon, FMT_TXT) "Date: "//date//" [ccyymmdd]"
+    WRITE(fh_mon, FMT_TXT) "Time: "//time//" [hhmmss.sss]"
+    WRITE(std_out, FMT_TXT) "Program invocation:"//TRIM(cmd_arg_history)          
     WRITE(fh_mon, FMT_TXT_SEP)  
     WRITE(fh_mon, FMT_MSG_xAI0) "Processors:", size_mpi  
     
