@@ -490,14 +490,6 @@ IF (my_rank==0) THEN
         CALL MPI_SEND(tglbl_in(mii), 1_mik, MPI_tensor_2nd_rank_R66, feed_ranks, &
             feed_ranks, MPI_COMM_WORLD, ierr)
         CALL print_err_stop(std_out, "MPI_SEND of tin failed.", INT(ierr, KIND=ik))            
-         
-        !------------------------------------------------------------------------------
-        ! Log to monitor file
-        !------------------------------------------------------------------------------
-        IF(debug >= 0) THEN
-            WRITE(fh_mon, FMT_DBG_xAI0)"MPI rank: ", feed_ranks, " Domain number: ", tglbl_in(mii)%dmn
-            FLUSH(fh_mon)
-        END IF
 
         !------------------------------------------------------------------------------
         ! Place a receive for the tensor. 
@@ -513,11 +505,6 @@ IF (my_rank==0) THEN
     END DO
     ! Still my_rank == 0
 
-    CALL MPI_WAITALL(size_mpi-1_mik, req_list, statuses_mpi, ierr)
-    CALL print_err_stop(std_out, "MPI_WAITANY on req_list for IRECV of tglbl_res failed.", &
-        INT(ierr, KIND=ik))
-
-    stat = stop_workers(size_mpi)
 !------------------------------------------------------------------------------
 ! Ranks > 0 -- Workers
 ! Worker: Must use my_rank as tag
@@ -611,7 +598,23 @@ ELSE
 
                     IF(debug >= 3) pm_steps = 30_ik
                 END IF
+         
+                !------------------------------------------------------------------------------
+                ! Log to monitor file (first worker thread)
+                !------------------------------------------------------------------------------
+                IF((debug >= 0) .AND. (my_rank == 1)) THEN
+                    WRITE(fh_mon, DBG//"4(A,1x,"//FMT_INT//",1x),A,"//FMT_REAL//")") &
+                        "MPI rank: ", feed_ranks, &
+                        " Domain number: ", tglbl_in(mii)%dmn, &
+                        " Opt. stage ", kk, &
+                        " Steps: ", pm_steps, &
+                        " Intervall: ", intervall
+                    FLUSH(fh_mon)
+                END IF
 
+                !------------------------------------------------------------------------------
+                ! Optimize tensors
+                !------------------------------------------------------------------------------
                 SELECT CASE(jj)
                     CASE(1); CALL opt_stiff('monotropic'); temp_suf = ".mono"
                     CASE(2); CALL opt_stiff('orthotropic'); temp_suf = ".orth"
@@ -674,6 +677,16 @@ ELSE
 END IF ! Worker processes since "ELSE"
 
 IF(my_rank == 0) THEN
+
+    !------------------------------------------------------------------------------
+    ! Wait for all processes
+    !------------------------------------------------------------------------------
+    CALL MPI_WAITALL(size_mpi-1_mik, req_list, statuses_mpi, ierr)
+    CALL print_err_stop(std_out, "MPI_WAITANY on req_list for IRECV of tglbl_res failed.", &
+        INT(ierr, KIND=ik))
+
+    stat = stop_workers(size_mpi)
+
     !------------------------------------------------------------------------------
     ! Write data to files.
     ! Crs counter mandatory! Otherwise, jj and tglbl_res will not match if not all

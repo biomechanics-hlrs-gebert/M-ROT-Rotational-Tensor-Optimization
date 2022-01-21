@@ -20,4 +20,4 @@ cd $PBS_O_WORKDIR
 module load mpi/openmpi/4.1.0-gnu-10.3.0
 #
 # Launch the parallel mpi application
-mpirun -np 520 ./bin/roto_v1.0.0_x86_64 $PBS_O_WORKDIR ./bin/PT01-1_mu_Dev_compare_KnochProbe2.meta
+mpirun -np 520 ./bin/roto_v1.0.0_x86_64 $PBS_O_WORKDIR ./datasets/PT01-1_mu_Dev_compare_KnochProbe2.meta
