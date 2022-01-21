@@ -18,11 +18,21 @@ cat ./datasets/M-ROTO.meta.template >> Your_Meta_File.meta
 
 ## Requirements
 * x86 64bit Hardware
-* Linux x86 64Bit with Bash
-* GNU Compiler Collection (GCC)
+* Linux x86 64Bit Installation with Bash or Zsh
+* GNU Compiler Collection (GCC), especially with gfortran
 * An installation of Open-MPI
 
-The installation of Open MPI can be done by the install script in the repository "Overview" of the biomechanics-hlrs-gebert organization @GitHub.
+The program must be compiled with:
+* Global integer kind=64Bit, signed
+* Meta-format integer kind=64Bit, signed
+* MPI integer kind=32Bit
+
+The installation of Open MPI is simplified with the install script of the repository "Overview" of the biomechanics-hlrs-gebert organization @GitHub.
+
+### Optional: Gnu debugging
+* [gdb](https://www.gnu.org/software/gdb/)
+* [tmpi](https://github.com/Azrael3000/tmpi)
+* [tmux](https://github.com/tmux/tmux/wiki)
 
 ## Build
 It's tested and recommended to build and run the program as follows. For developing the program on a laptop, "Julius" is the appropriate system.
