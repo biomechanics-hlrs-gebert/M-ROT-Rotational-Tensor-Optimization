@@ -51,7 +51,7 @@ SUBROUTINE write_criteria_space_to_vtk(file)
     CALL write_vtk_struct_points_header(fh, file, TRIM('rk4'), &
         [1._rk, 1._rk, 1._rk], [0._rk, 0._rk, 0._rk], ttl_steps)
 
-    CALL ser_write_raw(fh, file, REAL(crit, KIND=REAL32))
+    CALL ser_write_raw(fh, file, REAL(crit, KIND=REAL32), 'BIG_ENDIAN')
 
     CALL write_vtk_struct_points_footer(fh, file)
 
@@ -249,20 +249,15 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     CALL meta_handle_lock_file(restart, restart_cmd_arg)
 
-    !------------------------------------------------------------------------------
-    ! Spawn a monitoring file (to check the behavior of MPI)
-    !------------------------------------------------------------------------------
-    CALL meta_start_ascii(fh_mon, mon_suf)
-
     CALL DATE_AND_TIME(date, time)
 
-    WRITE(fh_mon, FMT_TXT_SEP)  
-    WRITE(fh_mon, FMT_TXT) TRIM(ADJUSTL(longname))//" Results"
-    WRITE(fh_mon, FMT_TXT) "Date: "//date//" [ccyymmdd]"
-    WRITE(fh_mon, FMT_TXT) "Time: "//time//" [hhmmss.sss]"
+    WRITE(std_out, FMT_TXT_SEP)  
+    WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(longname))//" Results"
+    WRITE(std_out, FMT_TXT) "Date: "//date//" [ccyymmdd]"
+    WRITE(std_out, FMT_TXT) "Time: "//time//" [hhmmss.sss]"
     WRITE(std_out, FMT_TXT) "Program invocation:"//TRIM(cmd_arg_history)          
-    WRITE(fh_mon, FMT_TXT_SEP)  
-    WRITE(fh_mon, FMT_MSG_xAI0) "Processors:", size_mpi  
+    WRITE(std_out, FMT_TXT_SEP)  
+    WRITE(std_out, FMT_MSG_xAI0) "Processors:", size_mpi  
     
     !------------------------------------------------------------------------------
     ! Create/Open tensor files. Basically tuned csv data.
@@ -359,10 +354,21 @@ IF(my_rank == 0) THEN
 
 END IF ! (my_rank == 0)
 
+!------------------------------------------------------------------------------
+! MPI derived datatypes are another way of sending the meta information.
+! But only the p_n_bsnm/path are used and they are used rarely. Therefore not
+! considered as a major issue.
+!------------------------------------------------------------------------------
 CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(out%path    , INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
 CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+
+!------------------------------------------------------------------------------
+! Spawn a monitoring file to check the behavior of MPI by the example of rank 1
+!------------------------------------------------------------------------------
+IF((debug >= 0) .AND. (my_rank == 1)) CALL meta_start_ascii(fh_mon, mon_suf)
 
 !------------------------------------------------------------------------------
 ! Why 8? Only 4 entries in array. 
@@ -603,12 +609,12 @@ ELSE
                 ! Log to monitor file (first worker thread)
                 !------------------------------------------------------------------------------
                 IF((debug >= 0) .AND. (my_rank == 1)) THEN
-                    WRITE(fh_mon, DBG//"4(A,1x,"//FMT_INT//",1x),A,"//FMT_REAL//")") &
-                        "MPI rank: ", feed_ranks, &
-                        " Domain number: ", tglbl_in(mii)%dmn, &
+                    WRITE(fh_mon, DBG//"3(A,1x,"//FMT_INT//",1x),A,3(I5,1x),A,3(F8.4,1x))") &
+                        "MPI rank: ", my_rank, &
+                        " Domain number: ", tin%dmn, &
                         " Opt. stage ", kk, &
                         " Steps: ", pm_steps, &
-                        " Intervall: ", intervall
+                        "Intervall: " , intervall
                     FLUSH(fh_mon)
                 END IF
 
@@ -723,14 +729,17 @@ END IF ! (my_rank == 0)
 !------------------------------------------------------------------------------
 1001 Continue
 
+!------------------------------------------------------------------------------
+! Stop monitoring of rank 1
+!------------------------------------------------------------------------------
+IF((debug >= 0) .AND. (my_rank == 1)) CALL meta_stop_ascii(fh_mon, mon_suf)
+
 IF(my_rank == 0) THEN
 
     !------------------------------------------------------------------------------
     ! Finish the program
     !------------------------------------------------------------------------------
     CALL meta_close(size_mpi)
-
-    CALL meta_stop_ascii(fh_mon, mon_suf)
 
     CALL CPU_TIME(end)
 
