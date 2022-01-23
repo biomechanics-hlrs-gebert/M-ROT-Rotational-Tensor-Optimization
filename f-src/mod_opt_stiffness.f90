@@ -28,9 +28,8 @@ IMPLICIT NONE
 ! dog            Output angles
 !------------------------------------------------------------------------------  
 TYPE(tensor_2nd_rank_R66) :: tin, tout
-INTEGER(KIND=ik), DIMENSION(3) :: pm_steps
-REAL(KIND=rk)   , DIMENSION(3) :: intervall, dig, dog
-REAL(KIND=rk)   , DIMENSION(:,:,:), ALLOCATABLE :: crit
+REAL(KIND=rk), DIMENSION(3) :: dig, dog
+REAL(KIND=rk), DIMENSION(:,:,:), ALLOCATABLE :: crit
 
 CONTAINS
 
@@ -44,10 +43,14 @@ CONTAINS
 !> Initial degrees must be integer!
 !
 !> @param[in] mode "monotropic" or "orthotropic"
+!> @param[in] steps Steps to calculate with intervall
+!> @param[in] intervall Distance between steps
 !------------------------------------------------------------------------------ 
-SUBROUTINE opt_stiff(mode)
+SUBROUTINE opt_stiff(mode, steps, intervall)
 
 CHARACTER(LEN=*), INTENT(IN) :: mode
+INTEGER(KIND=ik), DIMENSION(3) :: steps
+REAL(KIND=rk), DIMENSION(3) :: intervall
 
 INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps
 INTEGER(KIND=ik) :: ii, jj, kk
@@ -63,9 +66,9 @@ mask = 0_ik
 min = 10E09_ik
 
 !----------------------------------------------------------------------------------------------
-! Total amount of steps: requested angle +/- steps --> 2*steps + value --> (pm_steps*2)+1
+! Total amount of steps: requested angle +/- steps --> 2*steps + value --> (steps*2)+1
 !----------------------------------------------------------------------------------------------
-ttl_steps = (pm_steps*2_ik)+1_ik
+ttl_steps = (steps*2_ik)+1_ik
 
 !----------------------------------------------------------------------------------------------
 ! Copy input to output tensor. Important to keep domain data etc.
@@ -134,13 +137,13 @@ IF(.NOT. ALLOCATED(crit)) THEN
     ALLOCATE(crit(ttl_steps(1), ttl_steps(2), ttl_steps(3)))
 END IF
 
-alpha = dig(1) - (intervall(1) * pm_steps(1))
+alpha = dig(1) - (intervall(1) * steps(1))
 DO kk = 1_ik, ttl_steps(1)
 
-    eta = dig(2) - (intervall(2) * pm_steps(2))
+    eta = dig(2) - (intervall(2) * steps(2))
     DO jj = 1_ik, ttl_steps(2)
 
-        phi = dig(3) - (intervall(3) * pm_steps(3))
+        phi = dig(3) - (intervall(3) * steps(3))
         DO ii = 1_ik, ttl_steps(3)
 
             CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , tmp_r6x6)

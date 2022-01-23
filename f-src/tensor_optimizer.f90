@@ -31,9 +31,10 @@ CONTAINS
 !
 !> @param[in] file File to write to.
 !------------------------------------------------------------------------------  
-SUBROUTINE write_criteria_space_to_vtk(file)
+SUBROUTINE write_criteria_space_to_vtk(file, steps)
 
     CHARACTER(LEN=*), INTENT(IN) :: file
+    INTEGER(KIND=ik), DIMENSION(3) :: steps
 
     INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps
     INTEGER(KIND=ik) :: fh
@@ -46,7 +47,7 @@ SUBROUTINE write_criteria_space_to_vtk(file)
 
     fh = give_new_unit()
 
-    ttl_steps = (pm_steps*2_ik)+1_ik
+    ttl_steps = (steps*2_ik)+1_ik
 
     CALL write_vtk_struct_points_header(fh, file, TRIM('rk4'), &
         [1._rk, 1._rk, 1._rk], [0._rk, 0._rk, 0._rk], ttl_steps)
@@ -125,14 +126,17 @@ CHARACTER(LEN=mcl) :: crit_file, cmd_arg_history=''
 CHARACTER(LEN=scl) :: restart, restart_cmd_arg, re_mono, re_orth, re_ani1, re_ani2
 CHARACTER(LEN=scl) :: suf_covo, suf_mono, suf_orth, suf_ani1, suf_ani2, temp_suf    
 CHARACTER(LEN=scl) :: binary, dmn_no, suffix
+CHARACTER(LEN=  1) :: stg='1'
 CHARACTER(LEN=  8) :: date
 CHARACTER(LEN= 10) :: time
 
 REAL(KIND=rk) :: start, end, sym
+REAL(KIND=rk), DIMENSION(2,3) :: intervall 
 
 INTEGER(KIND=ik) :: fh_covo, fh_mono, fh_orth, fh_ani1, fh_ani2, fhwcrit
 INTEGER(KIND=ik) :: exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0
 INTEGER(KIND=ik) :: jj, kk, mm, stat, invalid_entries, iostat
+INTEGER(KIND=ik), DIMENSION(2,3) :: steps
 
 LOGICAL, DIMENSION(4) :: execute_optimization = .FALSE.
 LOGICAL :: stp, print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
@@ -249,6 +253,11 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     CALL meta_handle_lock_file(restart, restart_cmd_arg)
 
+    !------------------------------------------------------------------------------
+    ! Start monitoring of MPI
+    !------------------------------------------------------------------------------
+    CALL meta_start_ascii(fh_mon, mon_suf)
+
     CALL DATE_AND_TIME(date, time)
 
     WRITE(std_out, FMT_TXT_SEP)  
@@ -257,19 +266,18 @@ IF(my_rank == 0) THEN
     WRITE(std_out, FMT_TXT) "Time: "//time//" [hhmmss.sss]"
     WRITE(std_out, FMT_TXT) "Program invocation:"//TRIM(cmd_arg_history)          
     WRITE(std_out, FMT_TXT_SEP)  
-    WRITE(std_out, FMT_MSG_xAI0) "Processors:", size_mpi  
     
     !------------------------------------------------------------------------------
     ! Create/Open tensor files. Basically tuned csv data.
     !------------------------------------------------------------------------------
     fh_covo = give_new_unit()
-    suf_covo = ".stte.covo" ! control volume (in situ orientation)
+    suf_covo = ".stage-0.covo" ! control volume (in situ orientation)
     CALL meta_existing_ascii(fh_covo, suf_covo, covo_amnt_lines)
 
     crs = 0_mik
     IF(TRIM(re_mono) == "YES") THEN
         fh_mono = give_new_unit()
-        suf_mono = ".stte.mono" ! monotropic optimization 
+        suf_mono = ".stage-2.mono" ! monotropic optimization 
         CALL meta_start_ascii(fh_mono, suf_mono) 
         execute_optimization(1) = .TRUE. 
         crs=crs+1_mik
@@ -277,7 +285,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_orth) == "YES") THEN
         fh_orth = give_new_unit()
-        suf_orth = ".stte.orth" ! orthotropic optimization 
+        suf_orth = ".stage-2.orth" ! orthotropic optimization 
         CALL meta_start_ascii(fh_orth, suf_orth) 
         execute_optimization(2) = .TRUE. 
         crs=crs+1_mik
@@ -285,7 +293,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_ani1) == "YES") THEN
         fh_ani1 = give_new_unit()
-        suf_ani1 = ".stte.an1" ! anisotropic optimization, version 1 
+        suf_ani1 = ".stage-2.an1" ! anisotropic optimization, version 1 
         CALL meta_start_ascii(fh_ani1, suf_ani1) 
         execute_optimization(3) = .TRUE. 
         crs=crs+1_mik
@@ -293,7 +301,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_ani2) == "YES") THEN
         fh_ani2 = give_new_unit()
-        suf_ani2 = ".stte.an2" ! anisotropic optimization, version 2 
+        suf_ani2 = ".stage-2.an2" ! anisotropic optimization, version 2 
         CALL meta_start_ascii(fh_ani2, suf_ani2) 
         execute_optimization(4) = .TRUE. 
         crs=crs+1_mik
@@ -366,9 +374,23 @@ CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_
 CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
 !------------------------------------------------------------------------------
-! Spawn a monitoring file to check the behavior of MPI by the example of rank 1
+! Variables are global ones, which are valid for each specific rank (!)
+!
+! The optimization is done in two steps. First, search the best orientation
+! by 1° steps. Second, search at this positon with 0.025° steps.
 !------------------------------------------------------------------------------
-IF((debug >= 0) .AND. (my_rank == 1)) CALL meta_start_ascii(fh_mon, mon_suf)
+! Shorten turnaround times
+!------------------------------------------------------------------------------
+intervall(1,:) = 1._rk
+intervall(2,:) = 0.025_rk
+
+steps(1,:) = 182_ik
+steps(2,:) = 80_ik
+
+IF(debug >= 3) THEN
+    steps(1,:) = 30_ik
+    steps(2,:) = 30_ik
+END IF
 
 !------------------------------------------------------------------------------
 ! Why 8? Only 4 entries in array. 
@@ -383,7 +405,7 @@ CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
 ! All Ranks -- Init MPI request and status lists
 !------------------------------------------------------------------------------
 ALLOCATE(req_list(size_mpi-1_mik))
-req_list=0_mik
+req_list=1_mik
 
 ALLOCATE(statuses_mpi(MPI_STATUS_SIZE, size_mpi-1_mik))
 statuses_mpi=0_mik
@@ -496,7 +518,16 @@ IF (my_rank==0) THEN
         CALL MPI_SEND(tglbl_in(mii), 1_mik, MPI_tensor_2nd_rank_R66, feed_ranks, &
             feed_ranks, MPI_COMM_WORLD, ierr)
         CALL print_err_stop(std_out, "MPI_SEND of tin failed.", INT(ierr, KIND=ik))            
-
+         
+        !------------------------------------------------------------------------------
+        ! Log to monitor file (first worker thread)
+        !------------------------------------------------------------------------------
+        IF(debug >= 0) THEN
+            WRITE(fh_mon, DBG//"3(A,1x,"//FMT_INT//",1x),A,3(I5,1x),A,3(F8.4,1x))") &
+                "MPI rank: ", feed_ranks, &
+                " Domain number: ", tglbl_in(mii)%dmn
+            FLUSH(fh_mon)
+        END IF
         !------------------------------------------------------------------------------
         ! Place a receive for the tensor. 
         ! Tensors are not sortded automatically.
@@ -582,50 +613,31 @@ ELSE
                     WRITE(std_out, FMT_TXT_SEP)
                     FLUSH(std_out)
                 END IF
-                !------------------------------------------------------------------------------
-                ! Variables are global ones, which are valid for each specific rank (!)
-                !
-                ! The optimization is done in two steps. First, search the best orientation
-                ! by 1° steps. Second, search at this positon with 0.025° steps.
-                !------------------------------------------------------------------------------
-                IF(kk == 1_ik) THEN
-                    intervall = 1._rk
-                    pm_steps = 182_ik
 
-                   !------------------------------------------------------------------------------
-                   ! Shorten turnaround times
-                   !------------------------------------------------------------------------------
-                   IF(debug >= 3) pm_steps = 30_ik
-                ELSE
+                !------------------------------------------------------------------------------
+                ! Reset for stage 2
+                !------------------------------------------------------------------------------
+                IF(kk == 2_ik) THEN
                     tin%mat = tout%mat
                     dig = tout%pos
-                    intervall = 0.025_rk
-                    pm_steps = 80_ik
-
-                    IF(debug >= 3) pm_steps = 30_ik
                 END IF
-         
-                !------------------------------------------------------------------------------
-                ! Log to monitor file (first worker thread)
-                !------------------------------------------------------------------------------
-                IF((debug >= 0) .AND. (my_rank == 1)) THEN
-                    WRITE(fh_mon, DBG//"3(A,1x,"//FMT_INT//",1x),A,3(I5,1x),A,3(F8.4,1x))") &
-                        "MPI rank: ", my_rank, &
-                        " Domain number: ", tin%dmn, &
-                        " Opt. stage ", kk, &
-                        " Steps: ", pm_steps, &
-                        "Intervall: " , intervall
-                    FLUSH(fh_mon)
-                END IF
-
+                
                 !------------------------------------------------------------------------------
                 ! Optimize tensors
                 !------------------------------------------------------------------------------
                 SELECT CASE(jj)
-                    CASE(1); CALL opt_stiff('monotropic'); temp_suf = ".mono"
-                    CASE(2); CALL opt_stiff('orthotropic'); temp_suf = ".orth"
-                    CASE(3); CALL opt_stiff('anisotropic1'); temp_suf = ".an1"
-                    CASE(4); CALL opt_stiff('anisotropic2'); temp_suf = ".an2"
+                    CASE(1)
+                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:))
+                        temp_suf = ".mono"
+                    CASE(2)
+                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:))
+                        temp_suf = ".orth"
+                    CASE(3)
+                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:))
+                        temp_suf = ".an1"
+                    CASE(4)
+                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:))
+                        temp_suf = ".an2"
                 END SELECT        
 
                 !------------------------------------------------------------------------------
@@ -640,8 +652,32 @@ ELSE
                 tout%density = gebert_density_voigt(tout%mat, bone%E, bone%nu)
                 tout%sym = sym
 
-            END DO
+                !------------------------------------------------------------------------------
+                ! Print vtk files of criteria spaces
+                !------------------------------------------------------------------------------
+                IF(print_criteria) THEN 
+                    WRITE(stg, '(I0)') kk
 
+                    crit_file = TRIM(out%p_n_bsnm)//".stage-"//stg//"."//TRIM(dmn_no)//TRIM(temp_suf)//vtk_suf
+
+                    INQUIRE(FILE=TRIM(crit_file), EXIST=fex)
+
+                    IF(fex) THEN
+                        IF(restart == 'Y') THEN
+                            CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
+
+                            CALL print_err_stop(std_out, &
+                                "Removing the file "//TRIM(crit_file)//" failed.", iostat)
+                        ELSE
+                            CALL print_err_stop(std_out, &
+                                "File "//TRIM(crit_file)//" exists and restart is 'N'.", iostat)
+                        END IF
+                    END IF
+
+                    CALL write_criteria_space_to_vtk(TRIM(crit_file), steps(kk,:))
+                END IF
+
+            END DO
             !------------------------------------------------------------------------------
             ! At the end of the second step, the results acutally get written to the 
             ! output variables that are then send back to my_rank=0 / main process.
@@ -649,26 +685,6 @@ ELSE
             ! Domain always gets retrieved from tin directly.
             !------------------------------------------------------------------------------
             tlcl_res(crs_counter) = tout
-
-            IF(print_criteria) THEN 
-                crit_file = TRIM(out%p_n_bsnm)//".stte."//TRIM(dmn_no)//TRIM(temp_suf)//vtk_suf
-
-                INQUIRE(FILE=TRIM(crit_file), EXIST=fex)
-
-                IF(fex) THEN
-                    IF(restart == 'Y') THEN
-                        CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
-
-                        CALL print_err_stop(std_out, &
-                            "Removing the file "//TRIM(crit_file)//" failed.", iostat)
-                    ELSE
-                        CALL print_err_stop(std_out, &
-                            "File "//TRIM(crit_file)//" exists and restart is 'N'.", iostat)
-                    END IF
-                END IF
-
-                CALL write_criteria_space_to_vtk(TRIM(crit_file))
-            END IF
 
             crs_counter = crs_counter + 1_mik
 
@@ -685,6 +701,19 @@ END IF ! Worker processes since "ELSE"
 IF(my_rank == 0) THEN
 
     !------------------------------------------------------------------------------
+    ! Print last information
+    !------------------------------------------------------------------------------
+    WRITE(std_out, FMT_TXT_xAI0) "Processors:", size_mpi  
+    WRITE(std_out, FMT_TXT_SEP)  
+    WRITE(std_out, FMT_TXT) "Optimization parameters:"
+    WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 1:", steps(1,:)  
+    WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 1:", intervall(1,:)  
+    WRITE(std_out, FMT_TXT) ""
+    WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 2:", steps(2,:)  
+    WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 2:", intervall(2,:)  
+    WRITE(std_out, FMT_TXT_SEP)  
+
+    !------------------------------------------------------------------------------
     ! Wait for all processes
     !------------------------------------------------------------------------------
     CALL MPI_WAITALL(size_mpi-1_mik, req_list, statuses_mpi, ierr)
@@ -694,7 +723,7 @@ IF(my_rank == 0) THEN
     stat = stop_workers(size_mpi)
 
     !------------------------------------------------------------------------------
-    ! Write data to files.
+    ! Write data to files. Crs -> criteria space counter
     ! Crs counter mandatory! Otherwise, jj and tglbl_res will not match if not all
     ! kinds of optimizations are requested. 
     !------------------------------------------------------------------------------
@@ -751,8 +780,8 @@ IF(my_rank == 0) THEN
         WRITE(std_out,FMT_TXT) "Domain number for crit export requested, but no &
         &corresponding tensor found:"
         WRITE(std_out,FMT_TXT_xAI0) "Domain ", exp_dmn_crit
-        WRITE(std_out,FMT_TXT) "If problem was on OSI-Layer 8, then give a *.stte.covo file &
-            &with only the domain(s) requested."
+        WRITE(std_out,FMT_TXT) "If problem was on OSI-Layer 8, then give a &
+            &*.stage-0.covo file with only the domain(s) requested."
         WRITE(std_out,FMT_TXT) ""      
     END IF
     

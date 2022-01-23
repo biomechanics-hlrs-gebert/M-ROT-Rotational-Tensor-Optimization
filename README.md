@@ -59,10 +59,10 @@ mpirun ./bin/roto_v1.0.0_x86_64 -np 4 ./datasets/SC00-0_tc_Dev_ctif_G3S11Sig10.m
 ### Datasets
 ... are transfered via file exchange and are not pushed into the repository. 
 
-#### \*.stte.\*, Stiffness Tensor Data
+#### \*.stage-0.\*, Stiffness Tensor Data
 The 2nd rank R6x6 stiffness tensors (i.e., stiffness matrices) are store in files with the filename nomenclature:
 ```
-path/basename.stte.<state>
+path/basename.stage-0.<state>
 ```
 With following states:
 * covo - Original position of the stiffness tensors in respect to the control volume
@@ -70,6 +70,8 @@ With following states:
 * orth - Tensors optimized by a orthotropic objective
 * ani1 - Tensors optimized by an anisotropic objective (type1)
 * ani2 - Tensors optimized by an anisotropic objective (type2)
+
+Stage-0 represents an unoptimzed dataset. Stage 1 optimizes the whole degree of freedom. Stage 2 optimizes in a swept space of +/- 1°. Implementation of additional stages is pending.
 
 ### External Sources
 Plain text headers are parsed via a [strings module](https://gbenthien.net/strings/index.html) by George Benthien from San Diego.
