@@ -79,51 +79,51 @@ tout = tin
 ! Choose between monotropic or orthotropic optimization
 !----------------------------------------------------------------------------------------------
 SELECT CASE(TRIM(ADJUSTL(mode)))
+    !----------------------------------------------------------------------------------------------
+    !
+    ! General stiffness matrix, S_ij = S_ji:             Convention: 
+    ! 
+    ! [ S_11, S_12, S_13, | S_14, S_15, S_16 ]           [            |            ] 
+    ! [ S_21, S_22, S_23, | S_24, S_25, S_26 ]           [ Quadrant 2 | Quadrant 1 ] 
+    ! [ S_31, S_32, S_33, | S_34, S_35, S_36 ]           [            |            ] 
+    ! --------------------|-------------------           --------------------------- 
+    ! [ S_41, S_42, S_43, | S_44, S_45, S_46 ]           [            |            ] 
+    ! [ S_51, S_52, S_53, | S_54, S_55, S_56 ]           [ Quadrant 3 | Quadrant 4 ] 
+    ! [ S_61, S_62, S_63, | S_64, S_65, S_66 ]           [            |            ] 
+    !
+    ! 
+    ! Monotropic, case 1 of 3.                           Monotropic, case 2 of 3.                   
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, | S_14,   0 ,   0  ]           [ S_11, S_12, S_13, |   0 , S_15,   0  ] 
+    ! [ S_21, S_22, S_23, | S_24,   0 ,   0  ]           [ S_21, S_22, S_23, |   0 , S_25,   0  ] 
+    ! [ S_31, S_32, S_33, | S_34,   0 ,   0  ]           [ S_31, S_32, S_33, |   0 , S_35,   0  ] 
+    ! --------------------|-------------------           --------------------|------------------- 
+    ! [ S_41, S_42, S_43, | S_44,   0 ,   0  ]           [   0 ,   0 ,   0 , | S_44,   0 , S_46 ] 
+    ! [   0 ,   0 ,   0 , |   0 , S_55, S_56 ]           [ S_51, S_52, S_53, |   0 , S_55,   0  ] 
+    ! [   0 ,   0 ,   0 , |   0 , S_65, S_66 ]           [   0 ,   0 ,   0 , | S_64,   0 , S_66 ] 
+    !
+    ! Monotropic, case 3 of 3.                           Orthotropic:  
+    !                                                                                                 
+    ! [ S_11, S_12, S_13, |   0 ,   0 , S_16 ]           [ S_11, S_12, S_13, |   0 ,   0 ,   0  ] 
+    ! [ S_21, S_22, S_23, |   0 ,   0 , S_26 ]           [ S_21, S_22, S_23, |   0 ,   0 ,   0  ] 
+    ! [ S_31, S_32, S_33, |   0 ,   0 , S_36 ]           [ S_31, S_32, S_33, |   0 ,   0 ,   0  ] 
+    ! --------------------|-------------------           --------------------|------------------- 
+    ! [   0 ,   0 ,   0 , | S_44, S_45,   0  ]           [   0 ,   0 ,   0 , | S_44,   0 ,   0  ] 
+    ! [   0 ,   0 ,   0 , | S_54, S_55,   0  ]           [   0 ,   0 ,   0 , |   0 , S_55,   0  ] 
+    ! [ S_61, S_62, S_63, |   0 ,   0 , S_66 ]           [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ] 
+    !
+    !----------------------------------------------------------------------------------------------
+    ! At the monotropic and the orthotropic optimization, the zero entries are minimized. 
+    ! 
+    ! Example orthotropic: The 1st and the 3rd quadrant must be 0.
+    ! Additionally, the minor diagonals of the 4th quadrant must be 0. Therefore, each of the zero-
+    ! entries occurs in the upper right and the lower left triangle of the R6x6 matrix. 
+    ! Subsequently, the mask multiplies them by 2_ik.
+    !
+    ! The matrix mask needs no recurring initialization, as the values mustn't change during 
+    ! optimization (program runtime in general).
+    !----------------------------------------------------------------------------------------------
     CASE('monotropic')
-        !----------------------------------------------------------------------------------------------
-        !
-        ! General stiffness matrix, S_ij = S_ji:             Convention: 
-        ! 
-        ! [ S_11, S_12, S_13, | S_14, S_15, S_16 ]           [            |            ] 
-        ! [ S_21, S_22, S_23, | S_24, S_25, S_26 ]           [ Quadrant 2 | Quadrant 1 ] 
-        ! [ S_31, S_32, S_33, | S_34, S_35, S_36 ]           [            |            ] 
-        ! --------------------|-------------------           --------------------------- 
-        ! [ S_41, S_42, S_43, | S_44, S_45, S_46 ]           [            |            ] 
-        ! [ S_51, S_52, S_53, | S_54, S_55, S_56 ]           [ Quadrant 3 | Quadrant 4 ] 
-        ! [ S_61, S_62, S_63, | S_64, S_65, S_66 ]           [            |            ] 
-        !
-        ! 
-        ! Monotropic, case 1 of 3.                           Monotropic, case 2 of 3.                   
-        !                                                                                                                                                                                
-        ! [ S_11, S_12, S_13, | S_14,   0 ,   0  ]           [ S_11, S_12, S_13, |   0 , S_15,   0  ] 
-        ! [ S_21, S_22, S_23, | S_24,   0 ,   0  ]           [ S_21, S_22, S_23, |   0 , S_25,   0  ] 
-        ! [ S_31, S_32, S_33, | S_34,   0 ,   0  ]           [ S_31, S_32, S_33, |   0 , S_35,   0  ] 
-        ! --------------------|-------------------           --------------------|------------------- 
-        ! [ S_41, S_42, S_43, | S_44,   0 ,   0  ]           [   0 ,   0 ,   0 , | S_44,   0 , S_46 ] 
-        ! [   0 ,   0 ,   0 , |   0 , S_55, S_56 ]           [ S_51, S_52, S_53, |   0 , S_55,   0  ] 
-        ! [   0 ,   0 ,   0 , |   0 , S_65, S_66 ]           [   0 ,   0 ,   0 , | S_64,   0 , S_66 ] 
-        !
-        ! Monotropic, case 3 of 3.                           Orthotropic:  
-        !                                                                                                 
-        ! [ S_11, S_12, S_13, |   0 ,   0 , S_16 ]           [ S_11, S_12, S_13, |   0 ,   0 ,   0  ] 
-        ! [ S_21, S_22, S_23, |   0 ,   0 , S_26 ]           [ S_21, S_22, S_23, |   0 ,   0 ,   0  ] 
-        ! [ S_31, S_32, S_33, |   0 ,   0 , S_36 ]           [ S_31, S_32, S_33, |   0 ,   0 ,   0  ] 
-        ! --------------------|-------------------           --------------------|------------------- 
-        ! [   0 ,   0 ,   0 , | S_44, S_45,   0  ]           [   0 ,   0 ,   0 , | S_44,   0 ,   0  ] 
-        ! [   0 ,   0 ,   0 , | S_54, S_55,   0  ]           [   0 ,   0 ,   0 , |   0 , S_55,   0  ] 
-        ! [ S_61, S_62, S_63, |   0 ,   0 , S_66 ]           [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ] 
-        !
-        !----------------------------------------------------------------------------------------------
-        ! At the monotropic and the orthotropic optimization, the zero entries are minimized. 
-        ! 
-        ! Example orthotropic: The 1st and the 3rd quadrant must be 0.
-        ! Additionally, the minor diagonals of the 4th quadrant must be 0. Therefore, each of the zero-
-        ! entries occurs in the upper right and the lower left triangle of the R6x6 matrix. 
-        ! Subsequently, the mask multiplies them by 2_ik.
-        !
-        ! The matrix mask needs no recurring initialization, as the values mustn't change during 
-        ! optimization (program runtime in general).
-        !----------------------------------------------------------------------------------------------
         mask(1:4,5:6) = 2_ik
 
     CASE('orthotropic')
