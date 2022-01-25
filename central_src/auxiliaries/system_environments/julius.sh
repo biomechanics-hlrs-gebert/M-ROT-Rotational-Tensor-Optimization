@@ -6,7 +6,7 @@
 #
 # Author:    Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 # Created:   10.05.2021
-# Last edit: 03.01.2022
+# Last edit: 25.01.2022
 # -----------------------------------------------------------------------------
 # MPI environment
 mpi_prefix=/opt/mpi/openmpi-I4-4.1.2
@@ -64,7 +64,7 @@ if [ "$NO_OUTPUT" != "YES" ]; then
     for tool in "${tools[@]}"; do
         echo -n "-- "
         if ! which ${tool} ; then > /dev/null 2> /dev/null # (to suppress cmd line output)
-            echo "-- Please provide ${yellow}${tool}${nc} to use gdb with mpi."
+            echo "Please provide ${yellow}${tool}${nc} to use gdb with mpi."
             dbg_err=1
         fi
     done

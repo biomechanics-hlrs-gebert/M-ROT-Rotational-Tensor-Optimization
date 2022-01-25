@@ -52,7 +52,7 @@ CHARACTER(LEN=*), INTENT(IN) :: mode
 INTEGER(KIND=ik), DIMENSION(3) :: steps
 REAL(KIND=rk), DIMENSION(3) :: intervall
 
-INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps
+INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps, best_position
 INTEGER(KIND=ik) :: ii, jj, kk
 
 REAL(KIND=rk) :: min, alpha, eta, phi
@@ -80,37 +80,71 @@ tout = tin
 !----------------------------------------------------------------------------------------------
 SELECT CASE(TRIM(ADJUSTL(mode)))
     CASE('monotropic')
-    !----------------------------------------------------------------------------------------------
-    ! After multiplication with mask, the 2nd rank R6x6 tensor entries that are zero in an 
-    ! monotropic scenario are given like the tensor was given to the call opt_stiff.
-    !
-    ! The values of the mask are 2 instead of 1, because only the first and the fourth quadrant
-    ! of the matrix are taken into account.
-    !
-    ! The matrix mask needs no recurring initialization, as the values mustn't change during 
-    ! optimization (program runtime in general).
-    !----------------------------------------------------------------------------------------------
-    mask(1:4,5:6) = 2_ik
+        !----------------------------------------------------------------------------------------------
+        !
+        ! General stiffness matrix, S_ij = S_ji:             Convention: 
+        ! 
+        ! [ S_11, S_12, S_13, | S_14, S_15, S_16 ]           [            |            ] 
+        ! [ S_21, S_22, S_23, | S_24, S_25, S_26 ]           [ Quadrant 2 | Quadrant 1 ] 
+        ! [ S_31, S_32, S_33, | S_34, S_35, S_36 ]           [            |            ] 
+        ! --------------------|-------------------           --------------------------- 
+        ! [ S_41, S_42, S_43, | S_44, S_45, S_46 ]           [            |            ] 
+        ! [ S_51, S_52, S_53, | S_54, S_55, S_56 ]           [ Quadrant 3 | Quadrant 4 ] 
+        ! [ S_61, S_62, S_63, | S_64, S_65, S_66 ]           [            |            ] 
+        !
+        ! 
+        ! Monotropic, case 1 of 3.                           Monotropic, case 2 of 3.                   
+        !                                                                                                                                                                                
+        ! [ S_11, S_12, S_13, | S_14,   0 ,   0  ]           [ S_11, S_12, S_13, |   0 , S_15,   0  ] 
+        ! [ S_21, S_22, S_23, | S_24,   0 ,   0  ]           [ S_21, S_22, S_23, |   0 , S_25,   0  ] 
+        ! [ S_31, S_32, S_33, | S_34,   0 ,   0  ]           [ S_31, S_32, S_33, |   0 , S_35,   0  ] 
+        ! --------------------|-------------------           --------------------|------------------- 
+        ! [ S_41, S_42, S_43, | S_44,   0 ,   0  ]           [   0 ,   0 ,   0 , | S_44,   0 , S_46 ] 
+        ! [   0 ,   0 ,   0 , |   0 , S_55, S_56 ]           [ S_51, S_52, S_53, |   0 , S_55,   0  ] 
+        ! [   0 ,   0 ,   0 , |   0 , S_65, S_66 ]           [   0 ,   0 ,   0 , | S_64,   0 , S_66 ] 
+        !
+        ! Monotropic, case 3 of 3.                           Orthotropic:  
+        !                                                                                                 
+        ! [ S_11, S_12, S_13, |   0 ,   0 , S_16 ]           [ S_11, S_12, S_13, |   0 ,   0 ,   0  ] 
+        ! [ S_21, S_22, S_23, |   0 ,   0 , S_26 ]           [ S_21, S_22, S_23, |   0 ,   0 ,   0  ] 
+        ! [ S_31, S_32, S_33, |   0 ,   0 , S_36 ]           [ S_31, S_32, S_33, |   0 ,   0 ,   0  ] 
+        ! --------------------|-------------------           --------------------|------------------- 
+        ! [   0 ,   0 ,   0 , | S_44, S_45,   0  ]           [   0 ,   0 ,   0 , | S_44,   0 ,   0  ] 
+        ! [   0 ,   0 ,   0 , | S_54, S_55,   0  ]           [   0 ,   0 ,   0 , |   0 , S_55,   0  ] 
+        ! [ S_61, S_62, S_63, |   0 ,   0 , S_66 ]           [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ] 
+        !
+        !----------------------------------------------------------------------------------------------
+        ! At the monotropic and the orthotropic optimization, the zero entries are minimized. 
+        ! 
+        ! Example orthotropic: The 1st and the 3rd quadrant must be 0.
+        ! Additionally, the minor diagonals of the 4th quadrant must be 0. Therefore, each of the zero-
+        ! entries occurs in the upper right and the lower left triangle of the R6x6 matrix. 
+        ! Subsequently, the mask multiplies them by 2_ik.
+        !
+        ! The matrix mask needs no recurring initialization, as the values mustn't change during 
+        ! optimization (program runtime in general).
+        !----------------------------------------------------------------------------------------------
+        mask(1:4,5:6) = 2_ik
 
-CASE('orthotropic')
-    ! Explanation @ opt_stiff_mono
-    mask(1:3,4:6) = 2_ik
-    mask(  4,5:6) = 2_ik
-    mask(  5,  6) = 2_ik
+    CASE('orthotropic')
+        ! Explanation @ opt_stiff_mono
+        mask(1:3,4:6) = 2_ik
+        mask(  4,5:6) = 2_ik
+        mask(  5,  6) = 2_ik
 
-CASE('anisotropic1')
-    ! S11 available only once.
-    mask(1,1) = 1_ik
+    CASE('anisotropic1')
+        ! S11 available only once.
+        mask(1,1) = 1_ik
 
-CASE('anisotropic2')
-    ! S11, S22, S44 available only once.
-    mask(1,1) = 1_ik
-    mask(2,2) = 1_ik
-    mask(3,3) = 1_ik
+    CASE('anisotropic2')
+        ! S_11, S_22, S_33 available only once.
+        mask(1,1) = 1_ik
+        mask(2,2) = 1_ik
+        mask(3,3) = 1_ik
 
-CASE DEFAULT
-    mssg = "No valid optimization chosen. Check your implementation!"
-    CALL print_err_stop(std_out, mssg, 1)
+    CASE DEFAULT
+        mssg = "No valid optimization chosen. Check your implementation!"
+        CALL print_err_stop(std_out, mssg, 1)
 
 END SELECT
 
@@ -137,14 +171,17 @@ IF(.NOT. ALLOCATED(crit)) THEN
     ALLOCATE(crit(ttl_steps(1), ttl_steps(2), ttl_steps(3)))
 END IF
 
-alpha = dig(1) - (intervall(1) * steps(1))
-DO kk = 1_ik, ttl_steps(1)
+!----------------------------------------------------------------------------------------------
+! alpha = input angle - 1/2 of the swept angles.
+!----------------------------------------------------------------------------------------------
+phi = dig(3) - ((intervall(3) * steps(3)) / 2._rk)
+DO kk = 1_ik, ttl_steps(3)
 
-    eta = dig(2) - (intervall(2) * steps(2))
+    eta = dig(2) - ((intervall(2) * steps(2)) / 2._rk)
     DO jj = 1_ik, ttl_steps(2)
 
-        phi = dig(3) - (intervall(3) * steps(3))
-        DO ii = 1_ik, ttl_steps(3)
+        alpha = dig(1) - ((intervall(1) * steps(1)) / 2._rk)
+        DO ii = 1_ik, ttl_steps(1)
 
             CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , tmp_r6x6)
 
@@ -153,27 +190,39 @@ DO kk = 1_ik, ttl_steps(1)
             ! squared and summed up. Integer power (**2) is quicker than real power (**2.0).
             ! https://twitter.com/fortrantip/status/1478765410405298176?s=24
             !-------------------------------------------------------------------------------
-            crit(kk, jj, ii) = SUM((tmp_r6x6 * mask)**2_ik)  
+            crit(ii, jj, kk) = SUM((tmp_r6x6 * mask)**2_ik)  
 
-            !-------------------------------------------------------------------------------
-            ! Update the best position of the output matrix if the criteria is below the 
-            ! current minimum.
-            !-------------------------------------------------------------------------------
-            IF ( min > crit(kk, jj, ii)) THEN
-
-                min = crit(kk, jj, ii)
-
-                tout%pos = [ alpha, eta, phi ]
-            END IF
-
-        phi = phi + intervall(3)
+        alpha = alpha + intervall(1)
         END DO
 
     eta = eta + intervall(2)
     END DO
 
-alpha = alpha + intervall(1)
+phi = phi + intervall(3)
 END DO
+
+!-------------------------------------------------------------------------------
+! Find the best position (min or max) within the criteria space.
+!-------------------------------------------------------------------------------
+SELECT CASE(TRIM(ADJUSTL(mode)))
+    CASE('monotropic', 'orthotropic') 
+        best_position = MINLOC(crit(:, :, :))
+
+    CASE('anisotropic1', 'anisotropic2')
+        best_position = MAXLOC(crit(:, :, :))
+END SELECT
+
+!-------------------------------------------------------------------------------
+! Calculate the angles of the best position again. 
+! Alternatively the angles can be stored in an array like crit(:,:,:), but with 
+! KIND=REAL64. But storing this array and the if/else within the nested loops of
+! ii, jj, kk will consume lots of memory and compute time within the array.
+!-------------------------------------------------------------------------------
+alpha = dig(1) - ((intervall(1) * steps(1)) / 2._rk) + (intervall(1) * best_position(1))
+eta   = dig(2) - ((intervall(2) * steps(2)) / 2._rk) + (intervall(2) * best_position(2))
+phi   = dig(3) - ((intervall(3) * steps(3)) / 2._rk) + (intervall(3) * best_position(3))
+
+tout%pos = [ alpha, eta, phi ]
 
 !----------------------------------------------------------------------------------------------
 ! Recalculate the best combination of angles.

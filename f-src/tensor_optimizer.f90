@@ -616,6 +616,8 @@ ELSE
 
                 !------------------------------------------------------------------------------
                 ! Reset for stage 2
+                ! Dig = best position of stage 1. Dig is a global variable (!)
+                ! Optimization always begins at dig - (intervall * steps / 2._rk)
                 !------------------------------------------------------------------------------
                 IF(kk == 2_ik) THEN
                     tin%mat = tout%mat
