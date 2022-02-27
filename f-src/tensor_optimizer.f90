@@ -216,7 +216,7 @@ IF(my_rank == 0) THEN
     ! Check and open the input file; Modify the Meta-Filename / Basename
     ! Define the new application name first
     !------------------------------------------------------------------------------
-    global_meta_prgrm_mstr_app = 'roto' 
+    global_meta_prgrm_mstr_app = 'rot' 
     global_meta_program_keyword = 'ROT_TENSOR_OPT'
     CALL meta_append(m_rry)
     
