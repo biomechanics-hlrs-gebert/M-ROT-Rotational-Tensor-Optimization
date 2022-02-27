@@ -1,9 +1,9 @@
 # Rotational Tensor Optimization
-![Architecture](https://img.shields.io/badge/Architecture-x86-green)
-![OS](https://img.shields.io/badge/Linux-64Bit-green)
-![version](https://img.shields.io/badge/version-1.0.0-green)
-
-
+[![DOI](https://zenodo.org/badge/343225038.svg)](https://zenodo.org/badge/latestdoi/343225038)
+[![License: MIT](https://img.shields.io/badge/License-MIT-success.svg)](https://opensource.org/licenses/MIT)
+![Architecture](https://img.shields.io/badge/Architecture-x86_64-blue)
+![OS](https://img.shields.io/badge/OS-Linux-blue)
+![version](https://img.shields.io/badge/version-1.0.0-blue)
 
 Reads *.csv (comma separated value) files with one 2nd rank R6x6 tensor per row.
 
@@ -14,7 +14,7 @@ Tensors with more than 100% or less than 0.1% of the specified young modulus are
 ## Usage
 For example for testing on julius:
 ```
-mpirun ./bin/rot_v1.0.0_x86_64 -np 4 <basename>.meta```
+mpirun ./bin/rot_v1.0.0_x86_64 -np 4 <basename>.meta
 ```
 ## Datasets
 ... are transfered via file exchange and are not pushed into the repository. 
