@@ -3,11 +3,11 @@
 #
 # Author:    Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 # Date:      05.01.2022
-# Last edit: 05.01.2022
+# Last edit: 27.02.2022
 #
 # For use of make visit: https://www.gnu.org/software/make/
 # ------------------------------------------------------------------------------
-bin_name="roto"
+bin_name="rot"
 long_name="Rotational Tensor Optimization"
 # ------------------------------------------------------------------------------
 ifeq ($(PROVIDES_GIT),YES)

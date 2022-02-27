@@ -1,23 +1,23 @@
 #!/bin/bash
 # ------------------------------------------------------------------------------
-# Batch scipt for HLRS Vulcan and the ROTO-Rotational-Tensor-Optimization
+# Batch scipt for HLRS Vulcan
 #
 # Author:    Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 # Date:      09.01.2022
-# Last edit: 09.01.2022
+# Last edit: 27.02.2022
 #
 # For use of PBSPro visit:
 # https://kb.hlrs.de/platforms/index.php/Batch_System_PBSPro_(vulcan)
 # ------------------------------------------------------------------------------
-#PBS -N Roto_PT02-1
+#PBS -N rot
 #PBS -l select=13:node_type=clx384gb40c:mpiprocs=40
 #PBS -l walltime=10:00:00
 #
 # Change to the direcotry that the job was submitted from
-cd $PBS_O_WORKDIR
+cd "$PBS_O_WORKDIR" || exit
 #
 # Load module
 module load mpi/openmpi/4.1.0-gnu-10.3.0
 #
 # Launch the parallel mpi application
-mpirun -np 520 ./bin/roto_v1.0.0_x86_64 $PBS_O_WORKDIR ./datasets/PT01-1_mu_Dev_compare_KnochProbe2.meta
+mpirun -np 520 ./bin/roto_v1.0.0_x86_64 "$PBS_O_WORKDIR" ./datasets/PT01-1_mu_Dev_compare_KnochProbe2.meta

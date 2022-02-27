@@ -238,14 +238,14 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Parse input
     !------------------------------------------------------------------------------
-    CALL meta_read(std_out, 'REQUEST_MONO'   , m_rry, re_mono)
-    CALL meta_read(std_out, 'REQUEST_ORTH'   , m_rry, re_orth)
-    CALL meta_read(std_out, 'REQUEST_ANI_1'  , m_rry, re_ani1)
-    CALL meta_read(std_out, 'REQUEST_ANI_2'  , m_rry, re_ani2)
-    CALL meta_read(std_out, 'RESTART'        , m_rry, restart)
-    CALL meta_read(std_out, 'EXPORT_DMN_CRIT', m_rry, exp_dmn_crit)
-    CALL meta_read(std_out, 'YOUNG_MODULUS'  , m_rry, bone%E)
-    CALL meta_read(std_out, 'POISSON_RATIO'  , m_rry, bone%nu)
+    CALL meta_read('REQUEST_MONO'   , m_rry, re_mono)
+    CALL meta_read('REQUEST_ORTH'   , m_rry, re_orth)
+    CALL meta_read('REQUEST_ANI_1'  , m_rry, re_ani1)
+    CALL meta_read('REQUEST_ANI_2'  , m_rry, re_ani2)
+    CALL meta_read('RESTART'        , m_rry, restart)
+    CALL meta_read('EXPORT_DMN_CRIT', m_rry, exp_dmn_crit)
+    CALL meta_read('YOUNG_MODULUS'  , m_rry, bone%E)
+    CALL meta_read('POISSON_RATIO'  , m_rry, bone%nu)
 
     !------------------------------------------------------------------------------
     ! Restart handling
@@ -750,7 +750,7 @@ IF(my_rank == 0) THEN
 
     CALL meta_stop_ascii(fh_covo, suf_covo)
 
-    CALL meta_write(fhmeo, 'ZERO_MATRICES', '(-)', zero_matrix_counter)
+    CALL meta_write('ZERO_MATRICES', '(-)', zero_matrix_counter)
 
     CALL meta_signing(binary)
 END IF ! (my_rank == 0)
