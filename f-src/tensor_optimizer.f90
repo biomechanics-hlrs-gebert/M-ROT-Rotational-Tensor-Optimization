@@ -47,7 +47,7 @@ SUBROUTINE write_criteria_space_to_vtk(file, steps)
 
     fh = give_new_unit()
 
-    ttl_steps = (steps*2_ik)+1_ik
+    ttl_steps = steps+1_ik
 
     CALL write_vtk_struct_points_header(fh, file, TRIM('rk4'), &
         [1._rk, 1._rk, 1._rk], [0._rk, 0._rk, 0._rk], ttl_steps)
@@ -388,8 +388,10 @@ steps(1,:) = 182_ik
 steps(2,:) = 80_ik
 
 IF(debug >= 3) THEN
-    steps(1,:) = 30_ik
-    steps(2,:) = 30_ik
+    intervall(1,:) = 10._rk 
+    intervall(2,:) = 1._rk 
+    steps(1,:) = 18_ik
+    steps(2,:) = 4_ik
 END IF
 
 !------------------------------------------------------------------------------

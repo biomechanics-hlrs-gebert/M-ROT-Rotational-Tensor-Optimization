@@ -66,9 +66,9 @@ mask = 0_ik
 min = 10E09_ik
 
 !----------------------------------------------------------------------------------------------
-! Total amount of steps: requested angle +/- steps --> 2*steps + value --> (steps*2)+1
+! Total amount of steps: requested angle +/- steps --> steps + value --> steps+1
 !----------------------------------------------------------------------------------------------
-ttl_steps = (steps*2_ik)+1_ik
+ttl_steps = steps+1_ik
 
 !----------------------------------------------------------------------------------------------
 ! Copy input to output tensor. Important to keep domain data etc.
