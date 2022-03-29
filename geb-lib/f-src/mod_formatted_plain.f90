@@ -220,7 +220,7 @@ abort = .FALSE.
 
 CALL parse(TRIM(ADJUSTL(header)), ",", args=tokens, nargs=ntokens)
 
-IF(ntokens /= 44_ik) abort = .TRUE.
+IF(ntokens /= 45_ik) abort = .TRUE.
 
 !------------------------------------------------------------------------------
 ! Implementation might look silly. But calculating the indices during runtime, 
@@ -228,49 +228,50 @@ IF(ntokens /= 44_ik) abort = .TRUE.
 ! parsing the strings to numbers for comparison will consume way more time.
 !------------------------------------------------------------------------------
 IF(TRIM(ADJUSTL(tokens( 1))) /= "Domain")     abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 2))) /= "Density")    abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 3))) /= "DoA_Zener")  abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 4))) /= "DoA_Gebert") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 5))) /= "Sym_dev")    abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 6))) /= "pos_alpha")  abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 7))) /= "pos_eta")    abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 8))) /= "pos_phi")    abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens( 9))) /= "S11") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(10))) /= "S21") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(11))) /= "S31") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(12))) /= "S41") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(13))) /= "S51") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(14))) /= "S61") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(15))) /= "S12") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(16))) /= "S22") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(17))) /= "S32") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(18))) /= "S42") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(19))) /= "S52") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(20))) /= "S62") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(21))) /= "S13") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(22))) /= "S23") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(23))) /= "S33") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(24))) /= "S43") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(25))) /= "S53") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(26))) /= "S63") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(27))) /= "S14") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(28))) /= "S24") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(29))) /= "S34") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(30))) /= "S44") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(31))) /= "S54") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(32))) /= "S64") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(33))) /= "S15") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(34))) /= "S25") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(35))) /= "S35") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(36))) /= "S45") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(37))) /= "S55") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(38))) /= "S65") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(39))) /= "S16") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(40))) /= "S26") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(41))) /= "S36") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(42))) /= "S46") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(43))) /= "S56") abort = .TRUE.
-IF(TRIM(ADJUSTL(tokens(44))) /= "S66") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 2))) /= "Criteria")   abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 3))) /= "Density")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 4))) /= "DoA_Zener")  abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 5))) /= "DoA_Gebert") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 6))) /= "Sym_dev")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 7))) /= "pos_alpha")  abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 8))) /= "pos_eta")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens( 9))) /= "pos_phi")    abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(10))) /= "S11") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(11))) /= "S21") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(12))) /= "S31") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(13))) /= "S41") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(14))) /= "S51") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(15))) /= "S61") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(16))) /= "S12") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(17))) /= "S22") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(18))) /= "S32") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(19))) /= "S42") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(20))) /= "S52") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(21))) /= "S62") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(22))) /= "S13") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(23))) /= "S23") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(24))) /= "S33") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(25))) /= "S43") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(26))) /= "S53") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(27))) /= "S63") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(28))) /= "S14") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(29))) /= "S24") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(30))) /= "S34") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(31))) /= "S44") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(32))) /= "S54") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(33))) /= "S64") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(34))) /= "S15") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(35))) /= "S25") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(36))) /= "S35") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(37))) /= "S45") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(38))) /= "S55") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(39))) /= "S65") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(40))) /= "S16") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(41))) /= "S26") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(42))) /= "S36") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(43))) /= "S46") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(44))) /= "S56") abort = .TRUE.
+IF(TRIM(ADJUSTL(tokens(45))) /= "S66") abort = .TRUE.
 
 END SUBROUTINE check_tensor_2nd_rank_R66_header
 
@@ -295,6 +296,7 @@ INTEGER(KIND=ik), INTENT(IN) :: fh
 ! parsing the strings to numbers for comparison will consume way more time.
 !------------------------------------------------------------------------------
 WRITE(fh, '(A)', ADVANCE='NO')  "Domain, "
+WRITE(fh, '(A)', ADVANCE='NO')  "Criteria, "
 WRITE(fh, '(A)', ADVANCE='NO')  "Density, "
 WRITE(fh, '(A)', ADVANCE='NO')  "DoA_Zener, "
 WRITE(fh, '(A)', ADVANCE='NO')  "DoA_Gebert, "
@@ -370,7 +372,7 @@ invalid = .FALSE.
 
 CALL parse(TRIM(ADJUSTL(row)), ",", args=tokens, nargs=ntokens)
 
-IF(ntokens /= 44_ik) invalid = .TRUE.
+IF(ntokens /= 45_ik) invalid = .TRUE.
 
 !------------------------------------------------------------------------------
 ! Required, even if row is invalid. Does not check whether tokens(1) actually
@@ -383,22 +385,24 @@ IF(invalid) THEN
         "Invalid 'domain' "//TRIM(tokens(1))//" amount of tokens: ", ntokens
 
     tensor_of_row%dmn        = -tensor_of_row%dmn
+    tensor_of_row%crit       = ""
     tensor_of_row%density    = 0._rk
     tensor_of_row%doa_zener  = 0._rk
     tensor_of_row%doa_gebert = 0._rk
     tensor_of_row%pos        = 0._rk
     tensor_of_row%mat        = 0._rk    
 ELSE   
-    READ(tokens(2), '(F39.10)') tensor_of_row%density
-    READ(tokens(3), '(F39.10)') tensor_of_row%doa_zener
-    READ(tokens(4), '(F39.10)') tensor_of_row%doa_gebert
-    READ(tokens(5), '(F39.10)') tensor_of_row%sym
+    READ(tokens(2), '(A)')      tensor_of_row%crit
+    READ(tokens(3), '(F39.10)') tensor_of_row%density
+    READ(tokens(4), '(F39.10)') tensor_of_row%doa_zener
+    READ(tokens(5), '(F39.10)') tensor_of_row%doa_gebert
+    READ(tokens(6), '(F39.10)') tensor_of_row%sym
 
     DO ii=1, 3
-        READ(tokens(5_ik + ii), '(F39.10)') tensor_of_row%pos(ii)
+        READ(tokens(6_ik + ii), '(F39.10)') tensor_of_row%pos(ii)
     END DO
 
-    tkn = 9_ik
+    tkn = 10_ik
     DO jj=1, 6
         DO ii=1, 6
             READ(tokens(tkn), '(F39.10)') tensor_of_row%mat(ii, jj)
@@ -415,7 +419,7 @@ END SUBROUTINE parse_tensor_2nd_rank_R66_row
 !> @author Johannes Gebert, gebert@hlrs.de, HLRS/NUM
 !
 !> @brief
-!> Write a tensor_2nd_rank_R66 into a row of a tensor_2nd_rank_R66 file
+!> Write a tensor_2nd_rank_R66 into a row of a tensor_2nd_rank_R66 file.
 !
 !> @param[in] fh File handle, the header will be written to
 !> @param[in] tensor_of_row The resulting TYPE tensor_2nd_rank_R66 file
@@ -426,15 +430,22 @@ INTEGER(KIND=ik), INTENT(IN) :: fh
 TYPE(tensor_2nd_rank_R66), INTENT(IN) :: tensor_of_row
 
 INTEGER(KIND=ik) :: ii, jj
+
+!------------------------------------------------------------------------------  
+! The formats are independent of other plain text formats to extract a higher
+! number of digits, which maintains accuracy better.
+!------------------------------------------------------------------------------  
 CHARACTER(Len=*), PARAMETER :: FINT = "(I0, A)"
 CHARACTER(Len=*), PARAMETER :: FREAL = "(F0.10, A)"
+CHARACTER(Len=*), PARAMETER :: FSCI  = "(E17.10, A)"
+CHARACTER(Len=*), PARAMETER :: FCHAR = "(2A)"
 
-
-WRITE(fh, FINT, ADVANCE='NO') tensor_of_row%dmn, ", "
+WRITE(fh, FINT , ADVANCE='NO') tensor_of_row%dmn, ", "
+WRITE(fh, FCHAR, ADVANCE='NO') TRIM(tensor_of_row%crit), ", "
 WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%density, ", "
 WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%doa_zener, ", "
 WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%doa_gebert, ", "
-WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%sym, ", "
+WRITE(fh, FSCI , ADVANCE='NO') tensor_of_row%sym, ", "
 
 DO ii=1, 3
     WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%pos(ii), ", "
@@ -445,6 +456,7 @@ DO jj=1, 6
         WRITE(fh, FREAL, ADVANCE='NO') tensor_of_row%mat(ii,jj), ", "
     END DO
 END DO
+
 !------------------------------------------------------------------------------
 ! Newline, since mat(6,6) gets printed with ADVANCE='NO'
 !------------------------------------------------------------------------------

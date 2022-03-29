@@ -218,7 +218,6 @@ SUBROUTINE check_sym(matin, sym)
     REAL(KIND=rk), DIMENSION(:,:), INTENT(IN)  :: matin
     REAL(KIND=rk)                , INTENT(OUT) :: sym
 
-    ! INTEGER, DIMENSION(2) :: lb, ub
     INTEGER(KIND=ik) :: ii, jj
     REAL(KIND=rk) :: cummu, entry_counter
 
@@ -251,7 +250,6 @@ SUBROUTINE check_sym(matin, sym)
     ! 1 - sym quotient to compare to 0
     !------------------------------------------------------------------------------
     sym = 1._rk - (cummu / entry_counter)
-
 END SUBROUTINE check_sym
 
 

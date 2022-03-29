@@ -218,7 +218,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     global_meta_prgrm_mstr_app = 'rot' 
     global_meta_program_keyword = 'ROT_TENSOR_OPT'
-    CALL meta_append(m_rry)
+    CALL meta_append(m_rry, size_mpi)
     
     !------------------------------------------------------------------------------
     ! Redirect std_out into a file in case std_out is not useful by environment.
@@ -231,8 +231,8 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
 
-    CALL show_title()
- 
+    CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
+
     IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
 
     !------------------------------------------------------------------------------
@@ -484,7 +484,7 @@ IF (my_rank==0) THEN
         IF(std_out == 6_ik) THEN
             CALL EXECUTE_COMMAND_LINE("clear")
 
-            CALL show_title()
+            CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
             WRITE(std_out, FMT_TXT_xAI0) "Processed domains: ", mii, " of ", covo_amnt_lines-1_ik
             WRITE(std_out, FMT_TXT_xAI0) "Most current input to compute:", tglbl_in(mii)%dmn
@@ -770,7 +770,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Finish the program
     !------------------------------------------------------------------------------
-    CALL meta_close(size_mpi)
+    CALL meta_close()
 
     CALL CPU_TIME(end)
 

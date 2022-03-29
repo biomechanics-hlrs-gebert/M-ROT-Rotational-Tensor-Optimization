@@ -8,10 +8,10 @@
 !------------------------------------------------------------------------------
 MODULE user_interaction
 
-    USE ISO_FORTRAN_ENV
-    USE MPI
-    USE global_std
-    USE strings
+USE ISO_FORTRAN_ENV
+USE MPI
+USE global_std
+USE strings
 
 IMPLICIT NONE
 
@@ -84,6 +84,8 @@ CHARACTER(Len=*), PARAMETER :: FMT_ERR_xAL     = ERR//xAL
 !------------------------------------------------------------------------------
 ! Text formats
 !------------------------------------------------------------------------------
+CHARACTER(Len=*), PARAMETER :: FMT_TXT_STOP = "('-- Program finished.')"
+!
 CHARACTER(Len=*), PARAMETER :: FMT_TXT         = TXT//FMT
 CHARACTER(Len=*), PARAMETER :: FMT_TXT_SEP     = FMT_SEP ! "('-- ',80('-'))"
 !
@@ -107,6 +109,8 @@ CHARACTER(Len=*), PARAMETER :: FMT_TXT_xAL     = TXT//xAL
 !------------------------------------------------------------------------------
 ! Message/debug formats
 !------------------------------------------------------------------------------
+CHARACTER(Len=*), PARAMETER :: FMT_MSG_STOP = "('MM Program finished.')"
+!
 CHARACTER(Len=*), PARAMETER :: FMT_MSG         = MSG//FMT
 CHARACTER(Len=*), PARAMETER :: FMT_MSG_SEP     = FMT_SEP ! "('MM ',80('-'))"
 !
@@ -130,6 +134,8 @@ CHARACTER(Len=*), PARAMETER :: FMT_MSG_xAL     = MSG//xAL
 !------------------------------------------------------------------------------
 ! Warning formats
 !------------------------------------------------------------------------------
+CHARACTER(Len=*), PARAMETER :: FMT_WRN_STOP = "('WW Program halted.')"
+!
 CHARACTER(Len=*), PARAMETER :: FMT_WRN         = WRN//FMT
 CHARACTER(Len=*), PARAMETER :: FMT_WRN_SEP     = FMT_SEP ! "('WW ',80('-'))"
 !
@@ -189,6 +195,14 @@ CHARACTER(LEN=*), PARAMETER ::  FMT_Cyan    = "\x1B[36m"
 CHARACTER(LEN=*), PARAMETER ::  FMT_Gray    = "\x1B[37m"
 CHARACTER(LEN=*), PARAMETER ::  FMT_nocolor = "\x1B[0m"
 
+!> Interface: print_err_stop
+!> \author Johannes Gebert
+!> \date 16.03.2022
+INTERFACE print_err_stop
+    MODULE PROCEDURE print_err_stop_ik4
+    MODULE PROCEDURE print_err_stop_ik8
+END INTERFACE print_err_stop
+
 CONTAINS
 
 !------------------------------------------------------------------------------
@@ -241,7 +255,7 @@ ELSE
             CASE('-restart', '-Restart')
                 restart = 'Y'
             CASE('v', '-Version', '-version')
-                CALL show_title()
+                CALL show_title([""])
                 stp = .TRUE. 
             CASE('h', '-Help', '-help')
                 CALL usage(binary)
@@ -270,13 +284,32 @@ END SUBROUTINE get_cmd_args
 !> @brief
 !> Show brief information about the program. Variables from global_std module!
 !------------------------------------------------------------------------------
-SUBROUTINE show_title()
+SUBROUTINE show_title(authors, longname_opt)
+
+CHARACTER(LEN=*), DIMENSION(:), INTENT(IN) :: authors
+CHARACTER(LEN=*), OPTIONAL,     INTENT(IN) :: longname_opt
+
+CHARACTER(LEN=scl):: app_name
+INTEGER(KIND=ik) :: ii
+
+IF(PRESENT(longname_opt)) THEN
+    app_name = TRIM(ADJUSTL(longname_opt))
+ELSE
+    app_name = longname
+END IF 
+
 WRITE(std_out, FMT_TXT_SEP)
 WRITE(std_out, FMT_TXT) 'High-Performance Computing Center | Stuttgart (HLRS)'
 WRITE(std_out, FMT_TXT) ''
-WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(longname))
+WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(app_name))
 WRITE(std_out, FMT_TXT) ''     
-WRITE(std_out, FMT_TXT) 'Developer & maintainer: Johannes Gebert, M.Sc. (HLRS, NUM)'
+
+DO ii=1, SIZE(authors)
+    IF (LEN_TRIM(authors(ii)) > 0) THEN
+        WRITE(std_out, FMT_TXT) 'Developer/maintainer: '//TRIM(authors(ii))
+    END IF
+END DO 
+
 WRITE(std_out, FMT_TXT_SEP)
 END SUBROUTINE show_title
 
@@ -289,14 +322,25 @@ END SUBROUTINE show_title
 !> Print program usage. 
 !
 !> @param[in] this_binary Name of the binary - for example parsed from cmd args
+!> @param[in] additional_text Additional usage information
 !------------------------------------------------------------------------------  
-SUBROUTINE usage(this_binary)
+SUBROUTINE usage(this_binary, additional_text)
 
 CHARACTER(LEN=*), INTENT(IN) :: this_binary
+CHARACTER(LEN=*), DIMENSION(:), INTENT(IN), OPTIONAL :: additional_text
+
+INTEGER :: ii
 
 WRITE(std_out, FMT_TXT) 'Usage:'
 WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(this_binary))//' '//'<flags> <basename.meta>'
 WRITE(std_out, FMT_TXT) ''
+
+IF(PRESENT(additional_text)) THEN
+    DO ii = 1, SIZE(additional_text)
+        WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(additional_text(ii)))
+    END DO
+END IF 
+
 WRITE(std_out, FMT_TXT) '-h/ --help      This message.'
 WRITE(std_out, FMT_TXT) '-v/ --version   Version of the program'
 WRITE(std_out, FMT_TXT) '--restart       Overwrite restart keyword'
@@ -335,8 +379,6 @@ ELSE
 END IF
  
 END FUNCTION determine_stout
-
-
 
 !------------------------------------------------------------------------------
 ! SUBROUTINE: give_new_unit
@@ -403,7 +445,7 @@ subroutine mpi_err(ierr, text)
 end subroutine mpi_err
 
 !------------------------------------------------------------------------------
-! SUBROUTINE: print_err_stop
+! SUBROUTINE: print_err_stop_ik4
 !------------------------------------------------------------------------------  
 !> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 !
@@ -419,20 +461,54 @@ end subroutine mpi_err
 !> @param[in] text Error message to print
 !> @param[in] error Errorcode / status of the message
 !------------------------------------------------------------------------------  
-SUBROUTINE print_err_stop(fh, text, error) ! , pro_path, pro_name
+SUBROUTINE print_err_stop_ik4(fh, text, error)
+
+INTEGER(KIND=ik),  INTENT(IN) :: fh
+INTEGER(KIND=mik), INTENT(IN) :: error
+CHARACTER(LEN=*),  INTENT(IN) :: text
+
+IF (error > 0) THEN
+    ! TODO: Repair this routine :-)
+    ! CALL print_trimmed_text(fh, TRIM(text), FMT_ERR)
+    WRITE(fh, FMT_ERR) TRIM(text)
+    WRITE(fh, FMT_ERR_STOP)
+    STOP 
+END IF
+
+END SUBROUTINE print_err_stop_ik4
+
+!------------------------------------------------------------------------------
+! SUBROUTINE: print_err_stop_ik8
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief
+!> Stop a program.
+!
+!> @description
+!> Aborts non-gracefull with a stop on one processor if err > 0. 
+!> Err /= 0 is required to call this routine after another one 
+!> with a status feedback.
+!
+!> @param[in] fh Handle of file to print to
+!> @param[in] text Error message to print
+!> @param[in] error Errorcode / status of the message
+!------------------------------------------------------------------------------  
+SUBROUTINE print_err_stop_ik8(fh, text, error) ! , pro_path, pro_name
 
 INTEGER(KIND=ik), INTENT(IN) :: fh , error
 CHARACTER(LEN=*), INTENT(IN) :: text
 
 IF (error > 0) THEN
-   WRITE(fh, FMT_ERR) TRIM(text)
-   WRITE(fh, FMT_ERR_STOP)
-   WRITE(fh,FMT_ERR) "Can't stop gracefully."
-   STOP 
+    ! TODO: Repair this routine :-)
+    ! CALL print_trimmed_text(fh, TRIM(text), FMT_ERR)
+    WRITE(fh, FMT_ERR) TRIM(text)
+    WRITE(fh, FMT_ERR_STOP)
+    STOP 
 END IF
 
-END SUBROUTINE print_err_stop
-  
+END SUBROUTINE print_err_stop_ik8
+
 
 !------------------------------------------------------------------------------
 ! SUBROUTINE: estimated_time_of_arrival
@@ -471,5 +547,103 @@ SUBROUTINE estimated_time_of_arrival(sec, string)
     END IF
 
 END SUBROUTINE estimated_time_of_arrival
+
+!------------------------------------------------------------------------------
+! SUBROUTINE: print_trimmed_text
+!------------------------------------------------------------------------------  
+!> @author Johannes Gebert - HLRS - NUM - gebert@hlrs.de
+!
+!> @brief
+!> Prints a text with a specified width
+!
+!> @param[in] fh to print to
+!> @param[in] instring Input string
+!> @param[out] outstring Output string
+!------------------------------------------------------------------------------  
+SUBROUTINE print_trimmed_text (fh , instring, frmt)
+
+INTEGER(KIND=ik), INTENT(IN) :: fh
+CHARACTER(LEN=*), INTENT(IN) :: instring
+CHARACTER(LEN=*), INTENT(IN) :: frmt
+
+CHARACTER(LEN=mcl) :: text, sub_mssg
+CHARACTER(LEN=mcl)   :: delim, tokens(100), path_tokens(50)
+CHARACTER(LEN=mcl+1) :: next_token
+
+INTEGER(KIND=ik) :: ntokens, path_ntokens, ii, jj, sw, mode
+
+mode = 0                ! Absolute or relative path
+sw = 2                  ! Whether it's the beginning or within a path
+ntokens = 0             ! Amount of words in message
+path_ntokens = 0        ! Amount of words in a path
+delim = '/'
+sub_mssg = ''
+ii = 1
+jj = 1
+
+IF (instring  /= '') THEN
+
+    !------------------------------------------------------------------------------  
+    ! Parse error message
+    !------------------------------------------------------------------------------  
+    CALL parse(str=TRIM(ADJUSTL(instring)), delims=' ', args = tokens, nargs=ntokens)
+
+    !------------------------------------------------------------------------------  
+    ! next_token  = tokens(1) 
+    !------------------------------------------------------------------------------  
+    next_token = ''
+
+    DO WHILE (ii .LT. ntokens) 
+    
+        sub_mssg = REPEAT(' ', scl)
+        sub_mssg = TRIM(next_token)
+
+        DO           
+            !------------------------------------------------------------------------------  
+            ! path_ntokens = 1
+            !------------------------------------------------------------------------------  
+            IF (sw==2) CALL parse(str = tokens(ii), delims='/', args = path_tokens, nargs = path_ntokens)
+
+            IF (path_ntokens .GT. 1) sw=1
+            
+            IF (sw == 1) THEN
+                IF (TRIM(ADJUSTL(path_tokens(1))) =='') mode = 2
+                
+                IF ((mode == 2) .AND. (jj == 1)) jj = jj + 1
+                IF ((mode == 2) .AND. (jj == 2)) THEN
+                    delim = ' /'
+                ELSE
+                    delim = '/'
+                END IF
+
+                next_token = TRIM(delim)//ADJUSTL(path_tokens(jj))
+
+                jj = jj + 1                         
+                IF (jj .GT. path_ntokens) THEN
+                    sw   = 2
+                    jj   = 1
+                    mode = 1
+                    ii   = ii + 1
+                END IF
+            ELSE
+                next_token = ' '//tokens(ii)
+                ii = ii + 1
+                IF (ii .GT. ntokens+1) EXIT
+            END IF
+                        
+            IF ((LEN_TRIM(ADJUSTL(sub_mssg)) + LEN_TRIM(next_token)) .LT. scl) THEN
+                sub_mssg = TRIM(ADJUSTL(sub_mssg))//TRIM(next_token)
+            ELSE
+                EXIT ! Finishes the current line with scl characters
+            END IF
+        END DO
+
+        WRITE(fh, frmt) TRIM(sub_mssg)
+
+    END DO
+
+END IF ! (instring  /= '') THEN
+
+END SUBROUTINE print_trimmed_text
 
 END MODULE user_interaction

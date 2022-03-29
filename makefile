@@ -1,9 +1,9 @@
 # ------------------------------------------------------------------------------
-# Makefile to build the ROTO-Rotational-Tensor-Optimization
+# Makefile to build the ROT-Rotational-Tensor-Optimization
 #
 # Author:    Johannes Gebert - HLRS - NUM - gebert@hlrs.de
 # Date:      05.01.2022
-# Last edit: 27.02.2022
+# Last edit: 29.03.2022
 #
 # For use of make visit: https://www.gnu.org/software/make/
 # ------------------------------------------------------------------------------
@@ -14,10 +14,10 @@ ifeq ($(PROVIDES_GIT),YES)
 # Get git hash https://jblevins.org/log/vc
 # rev = $(shell git describe --tags --always)
 	rev = $(shell git rev-parse HEAD)
-	trgt_vrsn = $(shell git describe --tags --abbrev=0 | tee .version)
+	trgt_vrsn = $(shell git describe --tags --abbrev=0 | tee VERSION)
 else
 	rev = NO_GIT_REPOSITORY
-	trgt_vrsn = $(shell cat .version)
+	trgt_vrsn = $(shell cat VERSION)
 endif
 # -----------------------------------------------------------------------------
 # Check for environment
@@ -139,7 +139,7 @@ $(obj_dir)mod_opt_stiffness$(obj_ext):$(st_mod_dir)global_std$(mod_ext) \
                                       $(st_mod_dir)mechanical$(mod_ext) \
                                       $(st_mod_dir)math$(mod_ext) \
 	                                  $(f_src_dir)mod_opt_stiffness$(f90_ext)
-	@echo "----- Compiling " $(f_src_dir)mod_opt_stiffness$(f90_ext)" -----"
+	@echo "----- Compiling " $(f_src_dir)mod_opt_stiffness$(f90_ext) "-----"
 	$(compiler) $(c_flags_f90) -c $(f_src_dir)mod_opt_stiffness$(f90_ext) -o $@
 	@echo
 
@@ -153,7 +153,7 @@ $(obj_dir)tensor_optimizer$(obj_ext):$(st_mod_dir)global_std$(mod_ext)\
 									$(st_mod_dir)raw_binary$(mod_ext)\
  			            			$(mod_dir)opt_stiffness$(mod_ext)\
 									$(f_src_dir)tensor_optimizer$(f90_ext)
-	@echo "----- Compiling " $(f_src_dir)tensor_optimizer$(f90_ext) " -----"
+	@echo "----- Compiling " $(f_src_dir)tensor_optimizer$(f90_ext)  "-----"
 	$(compiler) $(c_flags_f90) -c $(f_src_dir)tensor_optimizer$(f90_ext) -o $@
 
 # --------------------------------------------------------------------------------------------------
@@ -162,7 +162,6 @@ export_revision:
 	@echo "----------------------------------------------------------------------------------"
 	@echo '-- Write revision and git info'
 	@echo "CHARACTER(LEN=scl), PARAMETER :: longname = '$(long_name)'" > $(st_f_src_dir)include_f90/revision_meta$(f90_ext)
-	@echo "CHARACTER(LEN=scl), PARAMETER :: revision = '$(trgt_vrsn)'" >> $(st_f_src_dir)include_f90/revision_meta$(f90_ext)
 	@echo "CHARACTER(LEN=scl), PARAMETER :: hash = '$(rev)'" >> $(st_f_src_dir)include_f90/revision_meta$(f90_ext)
 	@echo "----------------------------------------------------------------------------------"
 
