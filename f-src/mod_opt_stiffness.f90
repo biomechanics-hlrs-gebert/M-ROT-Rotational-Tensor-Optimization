@@ -46,13 +46,14 @@ CONTAINS
 !> @param[in] steps Steps to calculate with intervall
 !> @param[in] intervall Distance between steps
 !------------------------------------------------------------------------------ 
-SUBROUTINE opt_stiff(mode, steps, intervall)
+SUBROUTINE opt_stiff(mode, steps, intervall, stage)
 
 CHARACTER(LEN=*), INTENT(IN) :: mode
 INTEGER(KIND=ik), DIMENSION(3) :: steps
+INTEGER(KIND=ik), INTENT(IN) :: stage
 REAL(KIND=rk), DIMENSION(3) :: intervall
 
-INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps, best_position
+INTEGER(KIND=ik), DIMENSION(3) :: best_position
 INTEGER(KIND=ik) :: ii, jj, kk
 
 REAL(KIND=rk) :: min, alpha, eta, phi
@@ -61,14 +62,8 @@ REAL(KIND=rk), DIMENSION(6,6) :: tmp_r6x6, mask
 !----------------------------------------------------------------------------------------------
 ! Initialize variables
 !----------------------------------------------------------------------------------------------
-ttl_steps = 0_ik
 mask = 0_ik
 min = 10E09_ik
-
-!----------------------------------------------------------------------------------------------
-! Total amount of steps: requested angle +/- steps --> 2*steps + value --> (steps*2)+1
-!----------------------------------------------------------------------------------------------
-ttl_steps = (steps*2_ik)+1_ik
 
 !----------------------------------------------------------------------------------------------
 ! Copy input to output tensor. Important to keep domain data etc.
@@ -159,34 +154,35 @@ END SELECT
 ! @MPI: With mpi, crit may have a different state across the ranks!
 !----------------------------------------------------------------------------------------------
 IF(ALLOCATED(crit)) THEN
-    IF((SIZE(crit, DIM=1) /= ttl_steps(1)) .OR. &
-       (SIZE(crit, DIM=2) /= ttl_steps(2)) .OR. &
-       (SIZE(crit, DIM=3) /= ttl_steps(3))) THEN
+    IF((SIZE(crit, DIM=1) /= (steps(1)+1)) .OR. &
+       (SIZE(crit, DIM=2) /= (steps(2)+1)) .OR. &
+       (SIZE(crit, DIM=3) /= (steps(3)+1))) THEN
 
         DEALLOCATE(crit)
     END IF
 END IF
 
 IF(.NOT. ALLOCATED(crit)) THEN
-    ALLOCATE(crit(ttl_steps(1), ttl_steps(2), ttl_steps(3)))
+    ALLOCATE(crit(steps(1)+1, steps(2)+1, steps(3)+1))
 END IF
 
 !----------------------------------------------------------------------------------------------
 ! alpha = input angle - 1/2 of the swept angles.
 !----------------------------------------------------------------------------------------------
 phi = dig(3) - ((intervall(3) * steps(3)) / 2._rk)
-DO kk = 1_ik, ttl_steps(3)
+DO kk = 1_ik, steps(3)+1_ik
 
     IF(out_amount == "DEBUG") THEN
-        WRITE(std_out, "(A, '-- ', A, F0.2)", ADVANCE='NO') creturn , &
-            "Progress of current stage: ", REAL(kk, KIND=rk)/ttl_steps(3)
+        WRITE(std_out, "(A, '-- ', A, I0, 3A, F0.2, A)", ADVANCE='NO') creturn , &
+            "Progress of stage ", stage, " of ",TRIM(ADJUSTL(mode)), " mode: ", &
+            REAL(kk, KIND=rk)/(steps(3)+1)*100._rk, " %"
     END IF
 
     eta = dig(2) - ((intervall(2) * steps(2)) / 2._rk)
-    DO jj = 1_ik, ttl_steps(2)
+    DO jj = 1_ik, steps(2)+1_ik
 
         alpha = dig(1) - ((intervall(1) * steps(1)) / 2._rk)
-        DO ii = 1_ik, ttl_steps(1)
+        DO ii = 1_ik, steps(1)+1_ik
 
             CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , tmp_r6x6)
 

@@ -1,2 +1,2 @@
 CHARACTER(LEN=scl), PARAMETER :: longname = 'Rotational Tensor Optimization'
-CHARACTER(LEN=scl), PARAMETER :: hash = 'd68619aba427cce68a1b484b4aed73f06b903dde'
+CHARACTER(LEN=scl), PARAMETER :: hash = '2e2ae7b8d5cebe6c7b0dc410738e802a851903ea'

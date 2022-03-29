@@ -384,7 +384,7 @@ CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 intervall(1,:) = 1._rk
 intervall(2,:) = 0.025_rk
 
-steps(1,:) = 182_ik
+steps(1,:) = 180_ik
 steps(2,:) = 80_ik
 
 IF(debug >= 3) THEN
@@ -630,16 +630,16 @@ ELSE
                 !------------------------------------------------------------------------------
                 SELECT CASE(jj)
                     CASE(1)
-                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:))
+                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:), kk)
                         temp_suf = ".mono"
                     CASE(2)
-                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:))
+                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:), kk)
                         temp_suf = ".orth"
                     CASE(3)
-                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:))
+                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:), kk)
                         temp_suf = ".an1"
                     CASE(4)
-                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:))
+                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:), kk)
                         temp_suf = ".an2"
                 END SELECT        
 
