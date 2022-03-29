@@ -11,7 +11,7 @@ MODULE global_std
 IMPLICIT NONE
 
 ! Debugging
-CHARACTER(LEN=*), PARAMETER :: out_amount  = "PRODUCTION" ! "DEBUG" ! "ALEXANDRIA"
+CHARACTER(LEN=*), PARAMETER :: out_amount  = "DEBUG" ! "ALEXANDRIA" "PRODUCTION" ! 
 
 ! General constants
 INTEGER, PARAMETER :: sik = 2   ! INTEGER Kind
@@ -37,7 +37,7 @@ INTEGER(KIND=ik), PARAMETER :: std_err = 0
 INTEGER(KIND=ik), PARAMETER :: fhsterr  = 10
 
 !-- StdOut Characters
-CHARACTER(len=5) :: creturn = achar(13)
+CHARACTER(len=1) :: creturn = achar(13)
 
 ! Provide versioning information for transparent data tracking
 INCLUDE 'include_f90/revision_meta.f90'

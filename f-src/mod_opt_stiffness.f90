@@ -177,6 +177,11 @@ END IF
 phi = dig(3) - ((intervall(3) * steps(3)) / 2._rk)
 DO kk = 1_ik, ttl_steps(3)
 
+    IF(out_amount == "DEBUG") THEN
+        WRITE(std_out, "(A, '-- ', A, F0.2)", ADVANCE='NO') creturn , &
+            "Progress of current stage: ", REAL(kk, KIND=rk)/ttl_steps(3)
+    END IF
+
     eta = dig(2) - ((intervall(2) * steps(2)) / 2._rk)
     DO jj = 1_ik, ttl_steps(2)
 

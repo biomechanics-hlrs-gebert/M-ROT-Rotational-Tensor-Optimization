@@ -271,13 +271,13 @@ IF(my_rank == 0) THEN
     ! Create/Open tensor files. Basically tuned csv data.
     !------------------------------------------------------------------------------
     fh_covo = give_new_unit()
-    suf_covo = ".stage-0.covo" ! control volume (in situ orientation)
+    suf_covo = ".covo" ! control volume (in situ orientation)
     CALL meta_existing_ascii(fh_covo, suf_covo, covo_amnt_lines)
 
     crs = 0_mik
     IF(TRIM(re_mono) == "YES") THEN
         fh_mono = give_new_unit()
-        suf_mono = ".stage-2.mono" ! monotropic optimization 
+        suf_mono = ".mono" ! monotropic optimization 
         CALL meta_start_ascii(fh_mono, suf_mono) 
         execute_optimization(1) = .TRUE. 
         crs=crs+1_mik
@@ -285,7 +285,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_orth) == "YES") THEN
         fh_orth = give_new_unit()
-        suf_orth = ".stage-2.orth" ! orthotropic optimization 
+        suf_orth = ".orth" ! orthotropic optimization 
         CALL meta_start_ascii(fh_orth, suf_orth) 
         execute_optimization(2) = .TRUE. 
         crs=crs+1_mik
@@ -293,7 +293,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_ani1) == "YES") THEN
         fh_ani1 = give_new_unit()
-        suf_ani1 = ".stage-2.an1" ! anisotropic optimization, version 1 
+        suf_ani1 = ".an1" ! anisotropic optimization, version 1 
         CALL meta_start_ascii(fh_ani1, suf_ani1) 
         execute_optimization(3) = .TRUE. 
         crs=crs+1_mik
@@ -301,7 +301,7 @@ IF(my_rank == 0) THEN
 
     IF(TRIM(re_ani2) == "YES") THEN
         fh_ani2 = give_new_unit()
-        suf_ani2 = ".stage-2.an2" ! anisotropic optimization, version 2 
+        suf_ani2 = ".an2" ! anisotropic optimization, version 2 
         CALL meta_start_ascii(fh_ani2, suf_ani2) 
         execute_optimization(4) = .TRUE. 
         crs=crs+1_mik
@@ -429,12 +429,12 @@ IF (my_rank==0) THEN
         
     IF(debug >= 2) THEN
         ! DO mii = 1, 9
-        WRITE(std_out, FMT_DBG_AI0AxI0) "tglbl_in(" ,mii, ")%dmn: ", tglbl_in(mii)%dmn
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%density: ", tglbl_in(mii)%density
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%doa_zener: ", tglbl_in(mii)%doa_zener
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%doa_gebert: ", tglbl_in(mii)%doa_gebert
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%pos: ", tglbl_in(mii)%pos
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(" ,mii, ")%mat(1,1:3): ", tglbl_in(mii)%mat(1,1:3)
+        WRITE(std_out, FMT_DBG_AI0AxI0) "tglbl_in(", mii, ")%dmn: ", tglbl_in(mii)%dmn
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%density: ", tglbl_in(mii)%density
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%doa_zener: ", tglbl_in(mii)%doa_zener
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%doa_gebert: ", tglbl_in(mii)%doa_gebert
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%pos: ", tglbl_in(mii)%pos
+        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%mat(1,1:3): ", tglbl_in(mii)%mat(1,1:3)
         WRITE(std_out, FMT_TXT_SEP)
         FLUSH(std_out)
         ! end do
@@ -495,9 +495,10 @@ IF (my_rank==0) THEN
 
             CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), tglbl_in(mii)%mat, 'spl')
 
-            WRITE (std_out, FMT_TXT) "Lots of optimization steps requested."
-            WRITE (std_out, FMT_TXT) "The computation may take a long time."
-                
+            IF(out_amount /= "DEBUG") THEN
+                WRITE (std_out, FMT_TXT) "Lots of optimization steps requested."
+                WRITE (std_out, FMT_TXT) "The computation may take a long time."
+            END IF 
         END IF
 
         !------------------------------------------------------------------------------
@@ -649,6 +650,7 @@ ELSE
                 CALL check_sym(tout%mat, sym)
 
                 tout%dmn = tin%dmn
+                tout%density = tin%density
                 tout%doa_zener = doa_zener(tout%mat)
                 tout%doa_gebert = doa_gebert(tout%mat)
                 tout%density = gebert_density_voigt(tout%mat, bone%E, bone%nu)
@@ -680,6 +682,7 @@ ELSE
                 END IF
 
             END DO
+
             !------------------------------------------------------------------------------
             ! At the end of the second step, the results acutally get written to the 
             ! output variables that are then send back to my_rank=0 / main process.
@@ -707,10 +710,10 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     WRITE(std_out, FMT_TXT_xAI0) "Processors:", size_mpi  
     WRITE(std_out, FMT_TXT_SEP)  
-    WRITE(std_out, FMT_TXT) "Optimization parameters:"
+    WRITE(std_out, FMT_TXT)      "Optimization parameters:"
     WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 1:", steps(1,:)  
     WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 1:", intervall(1,:)  
-    WRITE(std_out, FMT_TXT) ""
+    WRITE(std_out, FMT_TXT)      ""
     WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 2:", steps(2,:)  
     WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 2:", intervall(2,:)  
     WRITE(std_out, FMT_TXT_SEP)  
@@ -774,13 +777,13 @@ IF(my_rank == 0) THEN
 
     CALL CPU_TIME(end)
 
-    WRITE(std_out,FMT_TXT_xAF0) 'Overall Time = ', (end-start) / 60._rk ,' Minutes'
-    WRITE(std_out,FMT_TXT_xAF0) 'CPU time = ', (end-start) / 60._rk / 60._rk * size_mpi,' Hours'
-    WRITE(std_out,FMT_TXT_SEP)
+    WRITE(std_out, FMT_TXT_xAF0) 'Overall Time = ', (end-start) / 60._rk ,' Minutes'
+    WRITE(std_out, FMT_TXT_xAF0) 'CPU time = ', (end-start) / 60._rk / 60._rk * size_mpi,' Hours'
+    WRITE(std_out, FMT_TXT_SEP)
 
     IF((.NOT. dmn_found) .AND. (crit_exp_req) .AND. (exp_dmn_crit /= -10_ik)) THEN
         WRITE(std_out,FMT_TXT) "Domain number for crit export requested, but no &
-        &corresponding tensor found:"
+            &corresponding tensor found:"
         WRITE(std_out,FMT_TXT_xAI0) "Domain ", exp_dmn_crit
         WRITE(std_out,FMT_TXT) "If problem was on OSI-Layer 8, then give a &
             &*.stage-0.covo file with only the domain(s) requested."
@@ -788,14 +791,14 @@ IF(my_rank == 0) THEN
     END IF
     
     IF(.NOT. crit_exp_req) THEN
-        WRITE(std_out,FMT_TXT) "No domain criteria space export requested."
-        WRITE(std_out,FMT_TXT) ""      
+        WRITE(std_out, FMT_TXT) "No domain criteria space export requested."
+        WRITE(std_out, FMT_TXT) ""      
     END IF
 
-    WRITE(std_out,FMT_TXT) 'Program finished.'
-    WRITE(std_out,FMT_TXT_SEP)
+    WRITE(std_out, FMT_TXT) 'Program finished.'
+    WRITE(std_out, FMT_TXT_SEP)
 
-    IF(std_out/=6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
+    IF(std_out /= 6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
 
 END IF ! (my_rank == 0)
 
