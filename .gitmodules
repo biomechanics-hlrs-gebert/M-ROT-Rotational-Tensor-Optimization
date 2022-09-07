@@ -1,0 +1,3 @@
+[submodule "geb-lib"]
+	path = geb-lib
+	url = git@github.com:biomechanics-hlrs-gebert/A-GLI-Geberts-Library.git
