@@ -260,13 +260,15 @@ IF(my_rank == 0) THEN
 
     CALL DATE_AND_TIME(date, time)
 
-    WRITE(std_out, FMT_TXT_SEP)  
-    WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(longname))//" Results"
-    WRITE(std_out, FMT_TXT) "Date: "//date//" [ccyymmdd]"
-    WRITE(std_out, FMT_TXT) "Time: "//time//" [hhmmss.sss]"
-    WRITE(std_out, FMT_TXT) "Program invocation:"//TRIM(cmd_arg_history)          
-    WRITE(std_out, FMT_TXT_SEP)  
-    
+    IF (debug>=1) THEN
+        WRITE(std_out, FMT_TXT_SEP)  
+        WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(longname))//" Results"
+        WRITE(std_out, FMT_TXT) "Date: "//date//" [ccyymmdd]"
+        WRITE(std_out, FMT_TXT) "Time: "//time//" [hhmmss.sss]"
+        WRITE(std_out, FMT_TXT) "Program invocation:"//TRIM(cmd_arg_history)          
+        WRITE(std_out, FMT_TXT_SEP)  
+    END IF
+
     !------------------------------------------------------------------------------
     ! Create/Open tensor files. Basically tuned csv data.
     !------------------------------------------------------------------------------
@@ -329,7 +331,7 @@ IF(my_rank == 0) THEN
         CALL print_err_stop(std_out, mssg, 1)
     END IF
 
-    IF(debug >= 0) THEN
+    IF(debug >= 1) THEN
         WRITE(std_out, FMT_DBG_xAI0) "Debug Level:", debug
         WRITE(std_out, FMT_DBG_xAI0) "Processors:", size_mpi  
         WRITE(std_out, FMT_DBG_xAI0) "Amount of domains:", covo_amnt_lines-1_ik
@@ -481,7 +483,7 @@ IF (my_rank==0) THEN
         ! Give feedback to user. Only active if the machine provides an interactive 
         ! terminal, which is determined by the environmemnt.
         !------------------------------------------------------------------------------)
-        IF(std_out == 6_ik) THEN
+        IF((std_out == 6_ik) .AND. (debug >= 1)) THEN
             CALL EXECUTE_COMMAND_LINE("clear")
 
             CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
@@ -708,16 +710,18 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Print last information
     !------------------------------------------------------------------------------
-    WRITE(std_out, FMT_TXT_xAI0) "Processors:", size_mpi  
-    WRITE(std_out, FMT_TXT_SEP)  
-    WRITE(std_out, FMT_TXT)      "Optimization parameters:"
-    WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 1:", steps(1,:)  
-    WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 1:", intervall(1,:)  
-    WRITE(std_out, FMT_TXT)      ""
-    WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 2:", steps(2,:)  
-    WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 2:", intervall(2,:)  
-    WRITE(std_out, FMT_TXT_SEP)  
-
+    IF(debug >= 0) THEN
+        WRITE(std_out, FMT_TXT_xAI0) "Processors:", size_mpi  
+        WRITE(std_out, FMT_TXT_SEP)  
+        WRITE(std_out, FMT_TXT)      "Optimization parameters:"
+        WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 1:", steps(1,:)  
+        WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 1:", intervall(1,:)  
+        WRITE(std_out, FMT_TXT)      ""
+        WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 2:", steps(2,:)  
+        WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 2:", intervall(2,:)  
+        WRITE(std_out, FMT_TXT_SEP)  
+    END IF
+    
     !------------------------------------------------------------------------------
     ! Wait for all processes
     !------------------------------------------------------------------------------
