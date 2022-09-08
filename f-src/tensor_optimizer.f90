@@ -111,8 +111,7 @@ USE auxiliaries_of_tensor_optimizer
 IMPLICIT NONE
 
 ! Parameter
-INTEGER(ik), PARAMETER :: debug = 0
-REAL   (rk), PARAMETER :: lower_thres_percentage = 0.01
+REAL   (rk), PARAMETER :: lower_thres_percentage = 0.03
 
 ! Variables
 TYPE(tensor_2nd_rank_R66) :: dummy
@@ -145,8 +144,8 @@ INTEGER(mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
 INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
 INTEGER(mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(mik), DIMENSION(7) :: blocklen, dtype 
-INTEGER(MPI_ADDRESS_KIND) :: disp(7), base
+INTEGER(mik), DIMENSION(8) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(8), base
 
 LOGICAL :: abrt = .FALSE.
 
@@ -162,29 +161,35 @@ CALL mpi_err(ierr,"MPI_COMM_SIZE couldn't be retrieved")
 
 IF (size_mpi < 2) CALL print_err_stop(std_out, "At least two ranks required to execute this program.", 1)
 
+ALLOCATE(statInt(size_mpi))
+
 !------------------------------------------------------------------------------
 ! Redirect std_out into a file in case std_out is not useful by environment.
 ! Place these lines before handle_lock_file :-)
 !------------------------------------------------------------------------------
 CALL MPI_GET_ADDRESS(dummy%dmn, disp(1), ierr) 
-CALL MPI_GET_ADDRESS(dummy%density, disp(2), ierr) 
-CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(3), ierr) 
-CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(4), ierr) 
-CALL MPI_GET_ADDRESS(dummy%sym, disp(5), ierr) 
-CALL MPI_GET_ADDRESS(dummy%pos, disp(6), ierr) 
-CALL MPI_GET_ADDRESS(dummy%mat, disp(7), ierr) 
+CALL MPI_GET_ADDRESS(dummy%crit, disp(2), ierr) 
+CALL MPI_GET_ADDRESS(dummy%density, disp(3), ierr) 
+CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(4), ierr) 
+CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(5), ierr) 
+CALL MPI_GET_ADDRESS(dummy%sym, disp(6), ierr) 
+CALL MPI_GET_ADDRESS(dummy%pos, disp(7), ierr) 
+CALL MPI_GET_ADDRESS(dummy%mat, disp(8), ierr) 
 	
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1:5) = 1 
-blocklen(6) = 3 
-blocklen(7) = 36 
+blocklen(1) = 1
+blocklen(2) = scl
+blocklen(3:6) = 1
+blocklen(7) = 3 
+blocklen(8) = 36 
 
 dtype(1) = MPI_INTEGER8 
-dtype(2:7) = MPI_DOUBLE_PRECISION
+dtype(2) = MPI_CHAR
+dtype(3:8) = MPI_DOUBLE_PRECISION
 
-CALL MPI_TYPE_CREATE_STRUCT(7_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(8_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
@@ -231,7 +236,7 @@ IF(my_rank == 0) THEN
 
     CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
-    IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
+    IF(out_amount=="DEBUG") WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
 
     !------------------------------------------------------------------------------
     ! Parse input
@@ -260,7 +265,7 @@ IF(my_rank == 0) THEN
 
     CALL DATE_AND_TIME(date, time)
 
-    IF (debug>=1) THEN
+    IF(out_amount=="DEBUG") THEN
         WRITE(std_out, FMT_TXT_SEP)  
         WRITE(std_out, FMT_TXT) TRIM(ADJUSTL(longname))//" Results"
         WRITE(std_out, FMT_TXT) "Date: "//date//" [ccyymmdd]"
@@ -331,8 +336,7 @@ IF(my_rank == 0) THEN
         CALL print_err_stop(std_out, mssg, 1)
     END IF
 
-    IF(debug >= 1) THEN
-        WRITE(std_out, FMT_DBG_xAI0) "Debug Level:", debug
+    IF(out_amount=="DEBUG") THEN
         WRITE(std_out, FMT_DBG_xAI0) "Processors:", size_mpi  
         WRITE(std_out, FMT_DBG_xAI0) "Number of domains:", covo_amnt_lines-1_ik
         WRITE(std_out, FMT_TXT_SEP)
@@ -390,7 +394,7 @@ intervall(2,:) = 0.025_rk
 steps(1,:) = 180_ik
 steps(2,:) = 80_ik
 
-IF(debug >= 3) THEN
+IF(out_amount=="DEBUG") THEN
     steps(1,:) = 30_ik
     steps(2,:) = 30_ik
 END IF
@@ -418,7 +422,7 @@ statuses_mpi=0_mik
 !------------------------------------------------------------------------------
 IF (my_rank==0) THEN
 
-    IF(debug >= 0) THEN
+    IF(out_amount=="DEBUG") THEN
         WRITE(std_out, FMT_DBG) "Starting worker supply."
         WRITE(std_out, FMT_DBG_xAF0) "Young modulus: ", bone%E
         WRITE(std_out, FMT_DBG_xAF0) "Poissions ratio: ", bone%nu
@@ -430,7 +434,7 @@ IF (my_rank==0) THEN
     mii = 1_mik
     feed_ranks = 1_mik 
         
-    IF(debug >= 2) THEN
+    IF(out_amount=="DEBUG") THEN
         ! DO mii = 1, 9
         WRITE(std_out, FMT_DBG_AI0AxI0) "tglbl_in(", mii, ")%dmn: ", tglbl_in(mii)%dmn
         WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%density: ", tglbl_in(mii)%density
@@ -467,6 +471,7 @@ IF (my_rank==0) THEN
         IF(SUM(tglbl_in(mii)%mat) <= lower_thres_percentage * bone%E) THEN
             DO mm=1, crs
                 tglbl_res(mm, mii)%density = 0._rk
+                tglbl_res(mm, mii)%crit = "<3% E"
                 tglbl_res(mm, mii)%doa_zener = 0._rk
                 tglbl_res(mm, mii)%doa_gebert = 0._rk
                 tglbl_res(mm, mii)%pos = 0._rk
@@ -484,7 +489,7 @@ IF (my_rank==0) THEN
         ! Give feedback to user. Only active if the machine provides an interactive 
         ! terminal, which is determined by the environmemnt.
         !------------------------------------------------------------------------------)
-        IF((std_out == 6_ik) .AND. (debug >= 1)) THEN
+        IF((std_out == 6_ik) .AND. (out_amount == "DEBUG")) THEN
             CALL EXECUTE_COMMAND_LINE("clear")
 
             CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
@@ -526,7 +531,7 @@ IF (my_rank==0) THEN
         !------------------------------------------------------------------------------
         ! Log to monitor file (first worker thread)
         !------------------------------------------------------------------------------
-        IF(debug >= 0) THEN
+        IF(out_amount=="DEBUG") THEN
             WRITE(fh_mon, DBG//"3(A,1x,"//FMT_INT//",1x),A,3(I5,1x),A,3(F8.4,1x))") &
                 "MPI rank: ", feed_ranks, &
                 " Domain number: ", tglbl_in(mii)%dmn
@@ -589,7 +594,7 @@ ELSE
         DO jj = 1_ik, 4_ik
             IF(.NOT. execute_optimization(jj)) CYCLE
 
-            IF(debug >= 3) THEN
+            IF(out_amount=="DEBUG") THEN
                 WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
                 WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%density: ", tin%density
                 WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%doa_zener: ", tin%doa_zener
@@ -610,7 +615,7 @@ ELSE
             dig = tin%pos 
 
             DO kk = 1_ik, 2_ik
-                IF(debug >= 3) THEN
+                IF(out_amount == "DEBUG") THEN
                     WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
                     WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization step: ", kk
                     WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization case: ", jj
@@ -633,18 +638,22 @@ ELSE
                 !------------------------------------------------------------------------------
                 SELECT CASE(jj)
                     CASE(1)
-                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:), kk)
+                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:))
                         temp_suf = ".mono"
+                        tout%crit = "mono"
                     CASE(2)
-                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:), kk)
+                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:))
                         temp_suf = ".orth"
+                        tout%crit = "orth"
                     CASE(3)
-                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:), kk)
+                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:))
                         temp_suf = ".an1"
+                        tout%crit = "an1"
                     CASE(4)
-                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:), kk)
+                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:))
                         temp_suf = ".an2"
-                END SELECT        
+                        tout%crit = "an2"
+                    END SELECT        
 
                 !------------------------------------------------------------------------------
                 ! Tilts until S11 > S22 > S33 
@@ -709,7 +718,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Print last information
     !------------------------------------------------------------------------------
-    IF(debug >= 0) THEN
+    IF(out_amount=="DEBUG") THEN
         WRITE(std_out, FMT_TXT_xAI0) "Processors:", size_mpi  
         WRITE(std_out, FMT_TXT_SEP)  
         WRITE(std_out, FMT_TXT)      "Optimization parameters:"
@@ -769,7 +778,7 @@ END IF ! (my_rank == 0)
 !------------------------------------------------------------------------------
 ! Stop monitoring of rank 1
 !------------------------------------------------------------------------------
-IF((debug >= 0) .AND. (my_rank == 1)) CALL meta_stop_ascii(fh_mon, mon_suf)
+IF((out_amount == "DEBUG") .AND. (my_rank == 1)) CALL meta_stop_ascii(fh_mon, mon_suf)
 
 IF(my_rank == 0) THEN
 

@@ -47,11 +47,10 @@ CONTAINS
 !> @param[in] steps Steps to calculate with intervall
 !> @param[in] intervall Distance between steps
 !------------------------------------------------------------------------------ 
-SUBROUTINE opt_stiff(mode, steps, intervall, stage)
+SUBROUTINE opt_stiff(mode, steps, intervall)
 
 CHARACTER(LEN=*), INTENT(IN) :: mode
 INTEGER(KIND=ik), DIMENSION(3) :: steps
-INTEGER(KIND=ik), INTENT(IN) :: stage
 REAL(KIND=rk), DIMENSION(3) :: intervall
 
 INTEGER(KIND=ik), DIMENSION(3) :: best_position
@@ -172,12 +171,6 @@ END IF
 !----------------------------------------------------------------------------------------------
 phi = dig(3) - ((intervall(3) * steps(3)) / 2._rk)
 DO kk = 1_ik, steps(3)+1_ik
-
-    IF(out_amount == "DEBUG") THEN
-        WRITE(std_out, "(A, '-- ', A, I0, 3A, F0.2, A)", ADVANCE='NO') creturn , &
-            "Progress of stage ", stage, " of ",TRIM(ADJUSTL(mode)), " mode: ", &
-            REAL(kk, KIND=rk)/(steps(3)+1)*100._rk, " %"
-    END IF
 
     eta = dig(2) - ((intervall(2) * steps(2)) / 2._rk)
     DO jj = 1_ik, steps(2)+1_ik
