@@ -16,7 +16,8 @@ USE user_interaction
 IMPLICIT NONE
 
 !------------------------------------------------------------------------------
-! Following variables are declared globally, but mustn't be send via mpi(!)
+! Following variables are declared globally, but mustn't be send via mpi,
+! because this may alter the results of the other ranks!
 ! Declaring them globally makes calling functions and exporting the computed
 ! criteria space of a tensor easier. 
 !------------------------------------------------------------------------------  

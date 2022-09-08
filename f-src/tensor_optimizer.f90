@@ -12,8 +12,10 @@ MODULE auxiliaries_of_tensor_optimizer
 USE global_std
 USE mechanical
 USE vtk_meta_data
-USE raw_binary
+USE mpi_binary
+USE ser_binary
 USE opt_stiffness
+USE mpi_user_interaction
 
 IMPLICIT NONE
 
@@ -33,11 +35,11 @@ CONTAINS
 !------------------------------------------------------------------------------  
 SUBROUTINE write_criteria_space_to_vtk(file, steps)
 
-    CHARACTER(LEN=*), INTENT(IN) :: file
-    INTEGER(KIND=ik), DIMENSION(3) :: steps
+    CHARACTER(*), INTENT(IN) :: file
+    INTEGER(ik), DIMENSION(3) :: steps
 
-    INTEGER(KIND=ik), DIMENSION(3) :: ttl_steps
-    INTEGER(KIND=ik) :: fh
+    INTEGER(ik), DIMENSION(3) :: ttl_steps
+    INTEGER(ik) :: fh
     LOGICAL :: fex
 
     fex = .FALSE.
@@ -52,7 +54,7 @@ SUBROUTINE write_criteria_space_to_vtk(file, steps)
     CALL write_vtk_struct_points_header(fh, file, TRIM('rk4'), &
         [1._rk, 1._rk, 1._rk], [0._rk, 0._rk, 0._rk], ttl_steps)
 
-    CALL ser_write_raw(fh, file, REAL(crit, KIND=REAL32), 'BIG_ENDIAN')
+    CALL ser_write_binary(fh, file, REAL(crit, REAL32), 'BIG_ENDIAN')
 
     CALL write_vtk_struct_points_footer(fh, file)
 
@@ -71,20 +73,19 @@ END SUBROUTINE write_criteria_space_to_vtk
 !------------------------------------------------------------------------------  
 FUNCTION stop_workers(size_mpi) RESULT (ierr)
 
-    INTEGER(KIND=mik), INTENT(IN) :: size_mpi
+    INTEGER(mik), INTENT(IN) :: size_mpi
 
-    INTEGER(KIND=mik) :: ierr, zz
+    INTEGER(mik) :: ierr, zz
 
     !------------------------------------------------------------------------------
     ! Stop workers properly by sending an activity = -1 info
     !------------------------------------------------------------------------------
     DO zz = 1, size_mpi-1_mik
         CALL MPI_SEND(-1_mik, 1_mik, MPI_INTEGER, zz, zz, MPI_COMM_WORLD, ierr)
-        CALL print_err_stop(std_out, "MPI_SEND of stopping workers failed.", INT(ierr, KIND=ik))
+        CALL print_err_stop(std_out, "MPI_SEND of stopping workers failed.", INT(ierr, ik))
     END DO
 
 END FUNCTION stop_workers
-
 
 
 END MODULE auxiliaries_of_tensor_optimizer
@@ -110,46 +111,44 @@ USE auxiliaries_of_tensor_optimizer
 IMPLICIT NONE
 
 ! Parameter
-INTEGER(KIND=ik), PARAMETER :: debug = 0
-REAL   (KIND=rk), PARAMETER :: lower_thres_percentage = 0.01
+INTEGER(ik), PARAMETER :: debug = 0
+REAL   (rk), PARAMETER :: lower_thres_percentage = 0.01
 
 ! Variables
 TYPE(tensor_2nd_rank_R66) :: dummy
-TYPE(tensor_2nd_rank_R66), DIMENSION(:), ALLOCATABLE :: tglbl_in
+TYPE(tensor_2nd_rank_R66), DIMENSION(:), ALLOCATABLE :: tglbl_in, tlcl_res
 TYPE(tensor_2nd_rank_R66), DIMENSION(:,:), ALLOCATABLE :: tglbl_res
-TYPE(tensor_2nd_rank_R66), DIMENSION(:), ALLOCATABLE :: tlcl_res
 
 TYPE(materialcard) :: bone
 
-CHARACTER(LEN=mcl), DIMENSION(:), ALLOCATABLE :: m_rry      
-CHARACTER(LEN=mcl) :: crit_file, cmd_arg_history=''
-CHARACTER(LEN=scl) :: restart, restart_cmd_arg, re_mono, re_orth, re_ani1, re_ani2
-CHARACTER(LEN=scl) :: suf_covo, suf_mono, suf_orth, suf_ani1, suf_ani2, temp_suf    
-CHARACTER(LEN=scl) :: binary, dmn_no, suffix
-CHARACTER(LEN=  1) :: stg='1'
-CHARACTER(LEN=  8) :: date
-CHARACTER(LEN= 10) :: time
+CHARACTER(mcl), DIMENSION(:), ALLOCATABLE :: m_rry      
+CHARACTER(mcl) :: crit_file, cmd_arg_history='', stat=""
+CHARACTER(scl) :: restart, restart_cmd_arg, re_mono, re_orth, re_ani1, re_ani2, &
+    suf_covo, suf_mono, suf_orth, suf_ani1, suf_ani2, temp_suf, &
+    binary, dmn_no, suffix
+CHARACTER(  1) :: stg='1'
+CHARACTER(  8) :: date
+CHARACTER( 10) :: time
 
-REAL(KIND=rk) :: start, end, sym
-REAL(KIND=rk), DIMENSION(2,3) :: intervall 
+REAL(rk) :: start, end, sym, intervall(2,3)
 
-INTEGER(KIND=ik) :: fh_covo, fh_mono, fh_orth, fh_ani1, fh_ani2, fhwcrit
-INTEGER(KIND=ik) :: exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0
-INTEGER(KIND=ik) :: jj, kk, mm, stat, invalid_entries, iostat
-INTEGER(KIND=ik), DIMENSION(2,3) :: steps
+INTEGER(ik) :: fh_covo, fh_mono, fh_orth, fh_ani1, fh_ani2, fhwcrit, &
+    exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0, &
+    jj, kk, mm, invalid_entries, iostat, steps(2,3)
 
 LOGICAL, DIMENSION(4) :: execute_optimization = .FALSE.
-LOGICAL :: stp, print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
+LOGICAL :: print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
 
-INTEGER(KIND=mik) :: ierr, my_rank, size_mpi, mii
-INTEGER(KIND=mik) :: active, feed_ranks, crs, crs_counter
-INTEGER(KIND=mik), DIMENSION(MPI_STATUS_SIZE) :: stmpi
-INTEGER(KIND=mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
-INTEGER(KIND=mik), DIMENSION(:), ALLOCATABLE :: req_list
+INTEGER(mik) :: ierr, my_rank, size_mpi, mii, active, feed_ranks, crs, crs_counter
+INTEGER(mik), DIMENSION(MPI_STATUS_SIZE) :: stmpi
+INTEGER(mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
+INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
-INTEGER(KIND=mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(KIND=mik), DIMENSION(7) :: blocklen, dtype 
-INTEGER(KIND=MPI_ADDRESS_KIND) :: disp(7), base
+INTEGER(mik) :: MPI_tensor_2nd_rank_R66
+INTEGER(mik), DIMENSION(7) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(7), base
+
+LOGICAL :: abrt = .FALSE.
 
 ! Initialize MPI Environment
 CALL MPI_INIT(ierr)
@@ -200,8 +199,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Parse the command arguments
     !------------------------------------------------------------------------------
-    CALL get_cmd_args(binary, in%full, stp, restart_cmd_arg, cmd_arg_history)
-    IF(stp) GOTO 1001
+    CALL get_cmd_args(binary, in%full, restart_cmd_arg, cmd_arg_history)
     
     IF (in%full=='') THEN
         CALL usage(binary)    
@@ -216,9 +214,9 @@ IF(my_rank == 0) THEN
     ! Check and open the input file; Modify the Meta-Filename / Basename
     ! Define the new application name first
     !------------------------------------------------------------------------------
-    global_meta_prgrm_mstr_app = 'rot' 
+    global_meta_prgrm_mstr_app = 'rot'
     global_meta_program_keyword = 'ROT_TENSOR_OPT'
-    CALL meta_append(m_rry, size_mpi)
+    CALL meta_append(m_rry, size_mpi, stat)
     
     !------------------------------------------------------------------------------
     ! Redirect std_out into a file in case std_out is not useful by environment.
@@ -238,14 +236,16 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Parse input
     !------------------------------------------------------------------------------
-    CALL meta_read('REQUEST_MONO'   , m_rry, re_mono)
-    CALL meta_read('REQUEST_ORTH'   , m_rry, re_orth)
-    CALL meta_read('REQUEST_ANI_1'  , m_rry, re_ani1)
-    CALL meta_read('REQUEST_ANI_2'  , m_rry, re_ani2)
-    CALL meta_read('RESTART'        , m_rry, restart)
-    CALL meta_read('EXPORT_DMN_CRIT', m_rry, exp_dmn_crit)
-    CALL meta_read('YOUNG_MODULUS'  , m_rry, bone%E)
-    CALL meta_read('POISSON_RATIO'  , m_rry, bone%nu)
+    CALL meta_read('REQUEST_MONO'   , m_rry, re_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('REQUEST_ORTH'   , m_rry, re_orth, stat); CALL mest(stat, abrt)
+    CALL meta_read('REQUEST_ANI_1'  , m_rry, re_ani1, stat); CALL mest(stat, abrt)
+    CALL meta_read('REQUEST_ANI_2'  , m_rry, re_ani2, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESTART'        , m_rry, restart, stat); CALL mest(stat, abrt)
+    CALL meta_read('YOUNG_MODULUS'  , m_rry, bone%E , stat); CALL mest(stat, abrt)
+    CALL meta_read('POISSON_RATIO'  , m_rry, bone%nu, stat); CALL mest(stat, abrt)
+    CALL meta_read('EXPORT_DMN_CRIT', m_rry, exp_dmn_crit, stat); CALL mest(stat, abrt)
+
+
 
     !------------------------------------------------------------------------------
     ! Restart handling
@@ -334,7 +334,7 @@ IF(my_rank == 0) THEN
     IF(debug >= 1) THEN
         WRITE(std_out, FMT_DBG_xAI0) "Debug Level:", debug
         WRITE(std_out, FMT_DBG_xAI0) "Processors:", size_mpi  
-        WRITE(std_out, FMT_DBG_xAI0) "Amount of domains:", covo_amnt_lines-1_ik
+        WRITE(std_out, FMT_DBG_xAI0) "Number of domains:", covo_amnt_lines-1_ik
         WRITE(std_out, FMT_TXT_SEP)
         FLUSH(std_out)
     END IF
@@ -344,12 +344,13 @@ IF(my_rank == 0) THEN
     ! Allocate amnt_lines -1_ik due to header
     !------------------------------------------------------------------------------
     ALLOCATE(tglbl_in(covo_amnt_lines-1_ik))
+
     CALL parse_tensor_2nd_rank_R66(fh_covo, in%p_n_bsnm//TRIM(suf_covo), &
         covo_amnt_lines, tglbl_in, invalid_entries)
 
     IF(covo_amnt_lines == invalid_entries+1_ik) THEN
         
-        stat = stop_workers(size_mpi)
+        statInt = stop_workers(size_mpi)
         
         mssg = "No valid data found. Probably an implementation issue or an &
             &invalid file format."
@@ -369,9 +370,9 @@ END IF ! (my_rank == 0)
 ! But only the p_n_bsnm/path are used and they are used rarely. Therefore not
 ! considered as a major issue.
 !------------------------------------------------------------------------------
-CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(out%path    , INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, KIND=mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(out%path    , INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
 CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
@@ -513,14 +514,14 @@ IF (my_rank==0) THEN
         ! Call the domain an active one.
         !------------------------------------------------------------------------------
         CALL MPI_SEND(1_mik, 1_mik, MPI_INTEGER, feed_ranks, feed_ranks, MPI_COMM_WORLD,ierr)
-        CALL print_err_stop(std_out, "MPI_SEND of activity didn't succeed", INT(ierr, KIND=ik))
+        CALL print_err_stop(std_out, "MPI_SEND of activity didn't succeed", INT(ierr, ik))
 
         !------------------------------------------------------------------------------
         ! Send tensor
         !------------------------------------------------------------------------------
         CALL MPI_SEND(tglbl_in(mii), 1_mik, MPI_tensor_2nd_rank_R66, feed_ranks, &
             feed_ranks, MPI_COMM_WORLD, ierr)
-        CALL print_err_stop(std_out, "MPI_SEND of tin failed.", INT(ierr, KIND=ik))            
+        CALL print_err_stop(std_out, "MPI_SEND of tin failed.", INT(ierr, ik))            
          
         !------------------------------------------------------------------------------
         ! Log to monitor file (first worker thread)
@@ -536,8 +537,8 @@ IF (my_rank==0) THEN
         ! Tensors are not sortded automatically.
         !------------------------------------------------------------------------------
         CALL MPI_IRECV(tglbl_res(:, mii), crs, MPI_tensor_2nd_rank_R66, feed_ranks, &
-            INT(tglbl_in(mii)%dmn, KIND=mik), MPI_COMM_WORLD, req_list(feed_ranks), ierr)
-        CALL print_err_stop(std_out, "MPI_IRECV of activity(mii) failed.", INT(ierr, KIND=ik))
+            INT(tglbl_in(mii)%dmn, mik), MPI_COMM_WORLD, req_list(feed_ranks), ierr)
+        CALL print_err_stop(std_out, "MPI_IRECV of activity(mii) failed.", INT(ierr, ik))
 
         feed_ranks = feed_ranks + 1_ik  
 
@@ -560,7 +561,7 @@ ELSE
         ! Stop (gracefully) if workers receive an active = -1 information.
         !------------------------------------------------------------------------------
         CALL MPI_RECV(active, 1_mik, MPI_INTEGER, 0_mik, my_rank, MPI_COMM_WORLD, stmpi, ierr)
-        CALL print_err_stop(std_out, "MPI_RECV on active failed.", INT(ierr, KIND=ik))
+        CALL print_err_stop(std_out, "MPI_RECV on active failed.", INT(ierr, ik))
 
         IF(active == -1) GOTO 1001
 
@@ -568,7 +569,7 @@ ELSE
         ! Receive tensor (derived type of tensor_2nd_rank_R66)
         !------------------------------------------------------------------------------
         CALL MPI_RECV(tin, 1_mik, MPI_tensor_2nd_rank_R66, 0_mik, my_rank, MPI_COMM_WORLD, stmpi, ierr)
-        CALL print_err_stop(std_out, "MPI_RECV on tin failed.", INT(ierr, KIND=ik))
+        CALL print_err_stop(std_out, "MPI_RECV on tin failed.", INT(ierr, ik))
 
         !------------------------------------------------------------------------------
         ! Check whether to write the requested domain(s) to *.vtk. At this point,
@@ -669,15 +670,13 @@ ELSE
                     INQUIRE(FILE=TRIM(crit_file), EXIST=fex)
 
                     IF(fex) THEN
-                        IF(restart == 'Y') THEN
-                            CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
+                        WRITE(std_out, '(A)') ""
+                        WRITE(std_out, FMT_WRN) "Deleting existing *.vtk file."
 
-                            CALL print_err_stop(std_out, &
-                                "Removing the file "//TRIM(crit_file)//" failed.", iostat)
-                        ELSE
-                            CALL print_err_stop(std_out, &
-                                "File "//TRIM(crit_file)//" exists and restart is 'N'.", iostat)
-                        END IF
+                        CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
+
+1                        CALL print_err_stop(std_out, &
+                            "Removing the file "//TRIM(crit_file)//" failed.", iostat)
                     END IF
 
                     CALL write_criteria_space_to_vtk(TRIM(crit_file), steps(kk,:))
@@ -697,9 +696,9 @@ ELSE
 
         END DO
 
-        CALL MPI_SEND(tlcl_res, INT(crs, KIND=mik), MPI_tensor_2nd_rank_R66, 0_mik, &
-            INT(tout%dmn, KIND=mik), MPI_COMM_WORLD, ierr)
-        CALL print_err_stop(std_out, "MPI_SEND on tlcl_res failed.", INT(ierr, KIND=ik))
+        CALL MPI_SEND(tlcl_res, INT(crs, mik), MPI_tensor_2nd_rank_R66, 0_mik, &
+            INT(tout%dmn, mik), MPI_COMM_WORLD, ierr)
+        CALL print_err_stop(std_out, "MPI_SEND on tlcl_res failed.", INT(ierr, ik))
 
     END DO
 
@@ -727,9 +726,9 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     CALL MPI_WAITALL(size_mpi-1_mik, req_list, statuses_mpi, ierr)
     CALL print_err_stop(std_out, "MPI_WAITANY on req_list for IRECV of tglbl_res failed.", &
-        INT(ierr, KIND=ik))
+        INT(ierr, ik))
 
-    stat = stop_workers(size_mpi)
+    statInt = stop_workers(size_mpi)
 
     !------------------------------------------------------------------------------
     ! Write data to files. Crs -> criteria space counter
@@ -807,7 +806,7 @@ IF(my_rank == 0) THEN
 END IF ! (my_rank == 0)
 
 CALL MPI_FINALIZE(ierr)
-CALL print_err_stop(std_out, "MPI_FINALIZE failed.", INT(ierr, KIND=ik))
+CALL print_err_stop(std_out, "MPI_FINALIZE failed.", INT(ierr, ik))
 
 END PROGRAM tensor_optimizer
 
