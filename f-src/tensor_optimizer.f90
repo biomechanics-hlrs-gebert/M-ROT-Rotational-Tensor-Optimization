@@ -148,7 +148,65 @@ INTEGER(mik) :: MPI_tensor_2nd_rank_R66
 INTEGER(mik), DIMENSION(7) :: blocklen, dtype 
 INTEGER(MPI_ADDRESS_KIND) :: disp(7), base
 
+
+
+
+
+
+
+
+
+
+
+
+Real(kind=rk) :: div_10_exp_jj, eff_density, n12, n13, n23, alpha, phi, eta
+Real(kind=rk) :: cos_alpha, sin_alpha, One_Minus_cos_alpha
+
+Real(kind=rk), Dimension(:)    , allocatable :: tmp_nn, delta, x_D_phy
+Real(kind=rk), Dimension(:,:)  , allocatable :: nodes, vv, ff, stiffness
+Real(kind=rk), Dimension(:,:,:), allocatable :: calc_rforces, uu, rforces, edat, crit_1, crit_2
+Real(kind=rk), Dimension(1)    :: tmp_real_fd1
+Real(Kind=rk), Dimension(3)    :: min_c, max_c, n
+Real(kind=rk), Dimension(6)    :: ro_stress
+Real(kind=rk), Dimension(8)    :: tmp_r8 
+Real(kind=rk), Dimension(12)   :: tmp_r12
+Real(kind=rk), Dimension(3,3)  :: aa
+Real(kind=rk), Dimension(6,6)  :: ee_orig, BB, CC, cc_mean, EE, fv,meps
+Real(kind=rk), Dimension(0:16) :: crit_min
+Real(Kind=rk), Dimension(6,24) :: int_strain, int_stress
+Real(kind=rk):: E_Modul, nu, rve_strain, v_elem, v_cube
+
+Integer(kind=mik), Dimension(MPI_STATUS_SIZE) :: status_mpi
+
+integer(Kind=ik) :: ii, ll, no_elem_nodes, micro_elem_nodes, no_lc, num_leaves, alloc_stat
+Integer(Kind=ik) :: no_elems, no_nodes, no_cnodes, macro_order, ii_phi, ii_eta, kk_phi, kk_eta
+
+Integer(kind=ik), Dimension(:,:,:,:), Allocatable :: ang
+Integer(Kind=ik), Dimension(:)      , Allocatable :: xa_n, xe_n, no_cnodes_pp, cref_cnodes
+Integer(kind=ik), Dimension(3)                    :: s_loop,e_loop, mlc
+
+Logical :: success
+
+Character(len=*), Parameter :: link_name="struct_calcmat_fmps"
+Character(len=9)   :: nn_char
+Character(Len=mcl) :: desc
+
+
 LOGICAL :: abrt = .FALSE.
+
+
+
+Allocate(ang(3,0:180,0:180,0:90))
+Allocate(crit_1(0:180,0:180,0:90), crit_2(0:180,0:180,0:90))
+
+
+
+
+
+
+
+
+
 
 ! Initialize MPI Environment
 CALL MPI_INIT(ierr)
@@ -161,6 +219,10 @@ CALL MPI_COMM_SIZE(MPI_COMM_WORLD, size_mpi, ierr)
 CALL mpi_err(ierr,"MPI_COMM_SIZE couldn't be retrieved")
 
 IF (size_mpi < 2) CALL print_err_stop(std_out, "At least two ranks required to execute this program.", 1)
+
+
+allocate(statInt(size_mpi))
+
 
 !------------------------------------------------------------------------------
 ! Redirect std_out into a file in case std_out is not useful by environment.
@@ -229,7 +291,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
 
-    CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
+    ! CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
     IF(debug >=0) WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
 
@@ -487,7 +549,7 @@ IF (my_rank==0) THEN
         IF((std_out == 6_ik) .AND. (debug >= 1)) THEN
             CALL EXECUTE_COMMAND_LINE("clear")
 
-            CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
+            ! CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
             WRITE(std_out, FMT_TXT_xAI0) "Processed domains: ", mii, " of ", covo_amnt_lines-1_ik
             WRITE(std_out, FMT_TXT_xAI0) "Most current input to compute:", tglbl_in(mii)%dmn
@@ -586,8 +648,7 @@ ELSE
         !------------------------------------------------------------------------------
         crs_counter = 1_mik
 
-        DO jj = 1_ik, 4_ik
-            IF(.NOT. execute_optimization(jj)) CYCLE
+            ! IF(.NOT. execute_optimization(jj)) CYCLE
 
             IF(debug >= 3) THEN
                 WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
@@ -605,84 +666,1070 @@ ELSE
             ! several times and do not need to be restarted from the position of the
             ! control volume within the bone.
             !
-            ! Assign a domain specific variable to a global, currently validone
+            ! Assign a domain specific variable to a global, currently valid one
             !------------------------------------------------------------------------------
             dig = tin%pos 
 
-            DO kk = 1_ik, 2_ik
-                IF(debug >= 3) THEN
-                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
-                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization step: ", kk
-                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization case: ", jj
-                    WRITE(std_out, FMT_TXT_SEP)
-                    FLUSH(std_out)
-                END IF
+            EE = tin%mat
 
-                !------------------------------------------------------------------------------
-                ! Reset for stage 2
-                ! Dig = best position of stage 1. Dig is a global variable (!)
-                ! Optimization always begins at dig - (intervall * steps / 2._rk)
-                !------------------------------------------------------------------------------
-                IF(kk == 2_ik) THEN
-                    tin%mat = tout%mat
-                    dig = tout%pos
-                END IF
-                
-                !------------------------------------------------------------------------------
-                ! Optimize tensors
-                !------------------------------------------------------------------------------
-                SELECT CASE(jj)
-                    CASE(1)
-                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:), kk)
-                        temp_suf = ".mono"
-                    CASE(2)
-                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:), kk)
-                        temp_suf = ".orth"
-                    CASE(3)
-                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:), kk)
-                        temp_suf = ".an1"
-                    CASE(4)
-                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:), kk)
-                        temp_suf = ".an2"
-                END SELECT        
 
-                !------------------------------------------------------------------------------
-                ! Tilts until S11 > S22 > S33 
-                !------------------------------------------------------------------------------
-                CALL tilt_tensor(tout%mat)
-                CALL check_sym(tout%mat, sym)
+            EE_Orig = EE
 
-                tout%dmn = tin%dmn
-                tout%density = tin%density
-                tout%doa_zener = doa_zener(tout%mat)
-                tout%doa_gebert = doa_gebert(tout%mat)
-                tout%density = gebert_density_voigt(tout%mat, bone%E, bone%nu)
-                tout%sym = sym
+            !###############################################################################
+            !###############################################################################
+            
+            !!$  !==========================================
+            !!$
+            !!$  oc%E1 = 1._rk
+            !!$  oc%E2 = 2._rk
+            !!$  oc%E3 = 3._rk
+            !!$
+            !!$  oc%v12 = 2._rk/5._rk
+            !!$  oc%v13 = 1._rk/10._rk
+            !!$  oc%v23 = 1._rk/3._rk
+            !!$
+            !!$  oc%G12 = 1._rk
+            !!$  oc%G13 = 2._rk
+            !!$  oc%G23 = 3._rk
+            !!$
+            !!$  EE= Matrix_Ortho(oc)
+            !!$  Call inverse(EE, 6, std_out)
+            !!$
+            !!$ EE=1._rk
+            !!$
+            !!$  desc="CG_2.4_784_c1_mono.raw"
+            !!$  open(unit=1234,file=trim(desc),action="write",status="replace",access="stream")
+            !!$  desc="CG_2.4_784_c2_ortho.raw"
+            !!$  open(unit=1235,file=trim(desc),action="write",status="replace",access="stream")
+            !!$  !==========================================
+        
+    !###############################################################################
+    !###############################################################################
 
-                !------------------------------------------------------------------------------
-                ! Print vtk files of criteria spaces
-                !------------------------------------------------------------------------------
-                IF(print_criteria) THEN 
-                    WRITE(stg, '(I0)') kk
+    kk_eta = 0
+    kk_phi = 0
+    kk = 0
 
-                    crit_file = TRIM(out%p_n_bsnm)//".stage-"//stg//"."//TRIM(dmn_no)//TRIM(temp_suf)//vtk_suf
+    Do ii_eta = 0 , 90 , 1
 
-                    INQUIRE(FILE=TRIM(crit_file), EXIST=fex)
+        kk_phi = 0
 
-                    IF(fex) THEN
-                        WRITE(std_out, '(A)') ""
-                        WRITE(std_out, FMT_WRN) "Deleting existing *.vtk file."
+        Do ii_phi = 0 , 180 , 1
 
-                        CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
+            kk = 0
 
-1                        CALL print_err_stop(std_out, &
-                            "Removing the file "//TRIM(crit_file)//" failed.", iostat)
-                    END IF
+            Do ii = 0 , 180 , 1
 
-                    CALL write_criteria_space_to_vtk(TRIM(crit_file), steps(kk,:))
-                END IF
+                alpha = Real(ii,rk)     * pi_div_180
+                phi   = Real(ii_phi,rk) * pi_div_180
+                eta   = Real(ii_eta,rk) * pi_div_180
 
-            END DO
+                n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ]
+                n = n / sqrt(sum(n*n))
+
+                !aa = rot_alg(n,alpha)
+
+                cos_alpha           = cos(alpha)
+                sin_alpha           = sin(alpha)
+                One_Minus_cos_alpha = 1._8 - cos_alpha
+                n12                 = n(1)*n(2)
+                n13                 = n(1)*n(3)                
+                n23                 = n(2)*n(3)
+
+                aa(1,1) = cos_alpha + n(1)*n(1)* One_Minus_cos_alpha
+                aa(2,2) = cos_alpha + n(2)*n(2)* One_Minus_cos_alpha
+                aa(3,3) = cos_alpha + n(3)*n(3)* One_Minus_cos_alpha 
+
+                aa(1,2) = n12 * One_Minus_cos_alpha  - n(3) * sin_alpha
+                aa(2,1) = n12 * One_Minus_cos_alpha  + n(3) * sin_alpha
+
+                aa(1,3) = n13 * One_Minus_cos_alpha  + n(2) * sin_alpha
+                aa(3,1) = n13 * One_Minus_cos_alpha  - n(2) * sin_alpha
+
+                aa(2,3) = n23 * One_Minus_cos_alpha  - n(1) * sin_alpha
+                aa(3,2) = n23 * One_Minus_cos_alpha  + n(1) * sin_alpha
+
+                !BB = tra_R6(aa)
+
+                BB(:,1) = [ aa(1,1)*aa(1,1) , aa(2,1)*aa(2,1) , aa(3,1)*aa(3,1) , &
+                    sq2*aa(2,1)*aa(1,1) , sq2*aa(1,1)*aa(3,1) , sq2*aa(2,1)*aa(3,1) ]
+                BB(:,2) = [ aa(1,2)*aa(1,2) , aa(2,2)*aa(2,2) , aa(3,2)*aa(3,2) , &
+                    sq2*aa(2,2)*aa(1,2) , sq2*aa(1,2)*aa(3,2) , sq2*aa(2,2)*aa(3,2) ]
+                BB(:,3) = [ aa(1,3)*aa(1,3) , aa(2,3)*aa(2,3) , aa(3,3)*aa(3,3) , &
+                    sq2*aa(2,3)*aa(1,3) , sq2*aa(1,3)*aa(3,3) , sq2*aa(2,3)*aa(3,3) ]
+                BB(:,4) = [ sq2*aa(1,1)*aa(1,2) , sq2*aa(2,1)*aa(2,2) , sq2*aa(3,1)*aa(3,2) , &
+                    aa(2,1)*aa(1,2)+aa(2,2)*aa(1,1) , aa(1,1)*aa(3,2)+aa(1,2)*aa(3,1) , aa(2,1)*aa(3,2)+aa(2,2)*aa(3,1) ]
+                BB(:,5) = [ sq2*aa(1,1)*aa(1,3) , sq2*aa(2,1)*aa(2,3) , sq2*aa(3,1)*aa(3,3) , &
+                    aa(2,1)*aa(1,3)+aa(2,3)*aa(1,1) , aa(1,1)*aa(3,3)+aa(1,3)*aa(3,1) , aa(2,1)*aa(3,3)+aa(2,3)*aa(3,1) ]
+                BB(:,6) = [ sq2*aa(1,2)*aa(1,3) , sq2*aa(2,2)*aa(2,3) , sq2*aa(3,2)*aa(3,3) , &
+                    aa(2,2)*aa(1,3)+aa(2,3)*aa(1,2) , aa(1,2)*aa(3,3)+aa(1,3)*aa(3,2) , aa(2,2)*aa(3,3)+aa(2,3)*aa(3,2) ]
+
+                !tmp_r6x6 = matmul(matmul(transpose(BB),EE),BB)
+
+                tmp_r12(1) = &
+                    BB(6,1) * &
+                    (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
+                    BB(5,1) * &
+                    (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
+                    BB(4,1) * &
+                    (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
+                    BB(3,1) * &
+                    (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
+                    BB(2,1) * &
+                    (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
+                    BB(1,1) * &
+                    (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
+                tmp_r12(2) =  &
+                    BB(6,1) * &
+                    (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                    BB(5,1) * &
+                    (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                    BB(4,1) * &
+                    (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                    BB(3,1) * &
+                    (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                    BB(2,1) * &
+                    (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                    BB(1,1) * &
+                    (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12(3) = &
+                    BB(6,1) * &
+                    (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                    BB(5,1) * &
+                    (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                    BB(4,1) * &
+                    (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                    BB(3,1) * &
+                    (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                    BB(2,1) * &
+                    (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                    BB(1,1) * &
+                    (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12(4) =  &
+                    BB(6,2) * &
+                    (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
+                    BB(5,2) * &
+                    (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
+                    BB(4,2) * &
+                    (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
+                    BB(3,2) * &
+                    (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
+                    BB(2,2) * &
+                    (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
+                    BB(1,2) * &
+                    (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
+                tmp_r12( 5) = &
+                    BB(6,2) * &
+                    (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                    BB(5,2) * &
+                    (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                    BB(4,2) * &
+                    (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                    BB(3,2) * &
+                    (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                    BB(2,2) * &
+                    (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                    BB(1,2) * &
+                    (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12( 6) = &
+                    BB(6,2) * &
+                    (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                    BB(5,2) * &
+                    (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                    BB(4,2) * &
+                    (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                    BB(3,2) * &
+                    (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                    BB(2,2) * &
+                    (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                    BB(1,2) * &
+                    (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12( 7) = &
+                    BB(6,3) * &
+                    (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
+                    BB(5,3) * &
+                    (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
+                    BB(4,3) * &
+                    (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
+                    BB(3,3) * &
+                    (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
+                    BB(2,3) * &
+                    (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
+                    BB(1,3) * &
+                    (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
+                tmp_r12( 8) = &
+                    BB(6,3) * &
+                    (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                    BB(5,3) * &
+                    (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                    BB(4,3) * &
+                    (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                    BB(3,3) * &
+                    (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                    BB(2,3) * &
+                    (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                    BB(1,3) * &
+                    (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12( 9) = &
+                    BB(6,3) * &
+                    (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                    BB(5,3) * &
+                    (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                    BB(4,3) * &
+                    (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                    BB(3,3) * &
+                    (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                    BB(2,3) * &
+                    (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                    BB(1,3) * &
+                    (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12(10) = &
+                    BB(6,4) * &
+                    (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                    BB(5,4) * &
+                    (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                    BB(4,4) * &
+                    (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                    BB(3,4) * &
+                    (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                    BB(2,4) * &
+                    (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                    BB(1,4) * &
+                    (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12(11) = &
+                    BB(6,4) * &
+                    (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                    BB(5,4) * &
+                    (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                    BB(4,4) * &
+                    (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                    BB(3,4) * &
+                    (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                    BB(2,4) * &
+                    (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                    BB(1,4) * &
+                    (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12(12) = &
+                    BB(6,5) * &
+                    (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                    BB(5,5) * &
+                    (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                    BB(4,5) * &
+                    (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                    BB(3,5) * &
+                    (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                    BB(2,5) * &
+                    (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                    BB(1,5) * &
+                    (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+
+                ang(:,kk,kk_phi,kk_eta)  = [ii,ii_phi,ii_eta]
+
+                !-- CR1 Monotropic ----------------------------------------
+!!$             crit_1(kk,kk_phi,kk_eta) = (&
+!!$                  sum((tmp_r6x6(1:4,5:6))*(tmp_r6x6(1:4,5:6))))
+                ! Calculated in tmp_r6x6 :
+                !  1  2  3  4  5  6
+                !     7  8  9 10 11
+                !       12 13 14 15
+                !          16 17 18
+                !             19 20
+                !                21
+                crit_1(kk,kk_phi,kk_eta) = ( &
+                    tmp_r12( 2)*tmp_r12( 2) + tmp_r12( 3)*tmp_r12( 3) + &
+                    tmp_r12( 5)*tmp_r12( 5) + tmp_r12( 6)*tmp_r12( 6) + &
+                    tmp_r12( 8)*tmp_r12( 8) + tmp_r12( 9)*tmp_r12( 9) + &
+                    tmp_r12(10)*tmp_r12(10) + tmp_r12(11)*tmp_r12(11)   &
+                    )
+                !-- CR2 Orthotropic ---------------------------------------
+!!$             crit_2(kk,kk_phi,kk_eta) = (&
+!!$                  sum(tmp_r6x6(1:3,4:6) * tmp_r6x6(1:3,4:6)) + &
+!!$                  sum(tmp_r6x6( 4 ,5:6) * tmp_r6x6( 4 ,5:6)) + &
+!!$                  tmp_r6x6( 5 , 6 ) * tmp_r6x6( 5 , 6 )     )
+                crit_2(kk,kk_phi,kk_eta) = (&
+                    tmp_r12( 1)*tmp_r12( 1) + tmp_r12( 2)*tmp_r12( 2) + tmp_r12( 3)*tmp_r12( 3) + &
+                    tmp_r12( 4)*tmp_r12( 4) + tmp_r12( 5)*tmp_r12( 5) + tmp_r12( 6)*tmp_r12( 6) + &
+                    tmp_r12( 7)*tmp_r12( 7) + tmp_r12( 8)*tmp_r12( 8) + tmp_r12( 9)*tmp_r12( 9) + &
+                    tmp_r12(10)*tmp_r12(10) + tmp_r12(11)*tmp_r12(11) + &
+                    tmp_r12(12)*tmp_r12(12) &
+                    )
+                kk = kk + 1
+            End Do
+            kk_phi = kk_phi + 1
+        end Do
+        kk_eta = kk_eta + 1
+    end Do
+
+    !=========================================================================
+    !== Iteration of Crit_1 ==================================================
+
+    crit_min    = 0._rk
+    crit_min(0) = minval(crit_1)
+    mlc         = minloc(crit_1)-1
+
+    If (out_amount /= "PRODUCTION" ) then
+        write(std_out,FMT_MSG_AxI0)'Initial Minloc  CR_1 : ',mlc
+        write(std_out,FMT_MSG_xAF0) 'Initial Minimum CR_1 : ',crit_min(0)
+    End If
+    
+    jj = 1
+
+    div_10_exp_jj = pi_div_180
+
+    Do 
+
+        mlc = minloc(crit_1(0:kk-1,0:kk_phi-1,0:kk_eta-1))-1
+
+        s_loop = (ang(:,mlc(1),mlc(2),mlc(3))-1)*10
+        e_loop = (ang(:,mlc(1),mlc(2),mlc(3))+1)*10
+
+        kk_eta = 0
+        kk_phi = 0
+        kk = 0
+
+        If (out_amount /= "PRODUCTION" ) then
+            write(std_out,FMT_MSG_xAI0) 'Iteration            : ',jj
+            write(std_out,FMT_MSG_AxI0)'Loop start           : ',s_loop
+            write(std_out,FMT_MSG_AxI0)'Loop end             : ',e_loop
+        End If
+        
+        div_10_exp_jj = div_10_exp_jj * 0.1_rk
+
+        Do ii_eta = s_loop(3), e_loop(3)
+
+            kk_phi = 0
+
+            Do ii_phi = s_loop(2), e_loop(2)
+
+                kk = 0
+
+                Do ii = s_loop(1), e_loop(1)
+
+                alpha = Real(ii,rk)     * div_10_exp_jj
+                phi   = Real(ii_phi,rk) * div_10_exp_jj
+                eta   = Real(ii_eta,rk) * div_10_exp_jj
+
+                n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ] 
+                n = n / sqrt(n(1)*n(1)+n(2)*n(2)+n(3)*n(3))
+
+                !aa = rot_alg(n,alpha)
+
+                cos_alpha           = cos(alpha)
+                sin_alpha           = sin(alpha)
+                One_Minus_cos_alpha = 1._8 - cos_alpha
+                n12                 = n(1)*n(2)
+                n13                 = n(1)*n(3)                
+                n23                 = n(2)*n(3)
+
+                aa(1,1) = cos_alpha + n(1)*n(1)* One_Minus_cos_alpha
+                aa(2,2) = cos_alpha + n(2)*n(2)* One_Minus_cos_alpha
+                aa(3,3) = cos_alpha + n(3)*n(3)* One_Minus_cos_alpha 
+
+                aa(1,2) = n12 * One_Minus_cos_alpha  - n(3) * sin_alpha
+                aa(2,1) = n12 * One_Minus_cos_alpha  + n(3) * sin_alpha
+
+                aa(1,3) = n13 * One_Minus_cos_alpha  + n(2) * sin_alpha
+                aa(3,1) = n13 * One_Minus_cos_alpha  - n(2) * sin_alpha
+
+                aa(2,3) = n23 * One_Minus_cos_alpha  - n(1) * sin_alpha
+                aa(3,2) = n23 * One_Minus_cos_alpha  + n(1) * sin_alpha
+
+                !BB = tra_R6(aa)
+
+                BB(:,1) = [ aa(1,1)*aa(1,1) , aa(2,1)*aa(2,1) , aa(3,1)*aa(3,1) , &
+                        sq2*aa(2,1)*aa(1,1) , sq2*aa(1,1)*aa(3,1) , sq2*aa(2,1)*aa(3,1) ]
+                BB(:,2) = [ aa(1,2)*aa(1,2) , aa(2,2)*aa(2,2) , aa(3,2)*aa(3,2) , &
+                        sq2*aa(2,2)*aa(1,2) , sq2*aa(1,2)*aa(3,2) , sq2*aa(2,2)*aa(3,2) ]
+                BB(:,3) = [ aa(1,3)*aa(1,3) , aa(2,3)*aa(2,3) , aa(3,3)*aa(3,3) , &
+                        sq2*aa(2,3)*aa(1,3) , sq2*aa(1,3)*aa(3,3) , sq2*aa(2,3)*aa(3,3) ]
+                BB(:,4) = [ sq2*aa(1,1)*aa(1,2) , sq2*aa(2,1)*aa(2,2) , sq2*aa(3,1)*aa(3,2) , &
+                        aa(2,1)*aa(1,2)+aa(2,2)*aa(1,1) , aa(1,1)*aa(3,2)+aa(1,2)*aa(3,1) , aa(2,1)*aa(3,2)+aa(2,2)*aa(3,1) ]
+                BB(:,5) = [ sq2*aa(1,1)*aa(1,3) , sq2*aa(2,1)*aa(2,3) , sq2*aa(3,1)*aa(3,3) , &
+                        aa(2,1)*aa(1,3)+aa(2,3)*aa(1,1) , aa(1,1)*aa(3,3)+aa(1,3)*aa(3,1) , aa(2,1)*aa(3,3)+aa(2,3)*aa(3,1) ]
+                BB(:,6) = [ sq2*aa(1,2)*aa(1,3) , sq2*aa(2,2)*aa(2,3) , sq2*aa(3,2)*aa(3,3) , &
+                        aa(2,2)*aa(1,3)+aa(2,3)*aa(1,2) , aa(1,2)*aa(3,3)+aa(1,3)*aa(3,2) , aa(2,2)*aa(3,3)+aa(2,3)*aa(3,2) ]
+
+                !tmp_r6x6 = matmul(matmul(transpose(BB),EE),BB)
+
+                tmp_r8(1) = &
+                        BB(6,1) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
+                        +BB(5,1) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
+                        +BB(4,1) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
+                        +BB(3,1) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
+                        +BB(2,1) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
+                        +BB(1,1) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r8(2) = &
+                        BB(6,1) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
+                        +BB(5,1) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
+                        +BB(4,1) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
+                        +BB(3,1) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
+                        +BB(2,1) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
+                        +BB(1,1) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r8( 3) = &
+                        BB(6,2) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
+                        +BB(5,2) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
+                        +BB(4,2) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
+                        +BB(3,2) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
+                        +BB(2,2) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
+                        +BB(1,2) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r8( 4) = &
+                        BB(6,2) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
+                        +BB(5,2) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
+                        +BB(4,2) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
+                        +BB(3,2) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
+                        +BB(2,2) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
+                        +BB(1,2) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r8( 5) = &
+                        BB(6,3) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
+                        +BB(5,3) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
+                        +BB(4,3) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
+                        +BB(3,3) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
+                        +BB(2,3) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
+                        +BB(1,3) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r8( 6) = &
+                        BB(6,3) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
+                        +BB(5,3) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
+                        +BB(4,3) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
+                        +BB(3,3) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
+                        +BB(2,3) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
+                        +BB(1,3) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r8( 7) = &
+                        BB(6,4) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) &
+                        +BB(5,4) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) &
+                        +BB(4,4) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) &
+                        +BB(3,4) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) &
+                        +BB(2,4) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) &
+                        +BB(1,4) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r8( 8) = &
+                        BB(6,4) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) &
+                        +BB(5,4) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) &
+                        +BB(4,4) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) &
+                        +BB(3,4) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) &
+                        +BB(2,4) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) &
+                        +BB(1,4) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+
+                ang(:,kk,kk_phi,kk_eta)  = [ii,ii_phi,ii_eta]
+
+                !-- CR1 Monotropic ----------------------------------------
+!!$                crit_1(kk,kk_phi,kk_eta) = (&
+!!$                     sum((tmp_r6x6(1:4,5:6))*(tmp_r6x6(1:4,5:6))))
+                crit_1(kk,kk_phi,kk_eta) = ( &
+                        tmp_r8( 1)*tmp_r8( 1) + tmp_r8( 2)*tmp_r8( 2) + &
+                        tmp_r8( 3)*tmp_r8( 3) + tmp_r8( 4)*tmp_r8( 4) + &
+                        tmp_r8( 5)*tmp_r8( 5) + tmp_r8( 6)*tmp_r8( 6) + &
+                        tmp_r8( 7)*tmp_r8( 7) + tmp_r8( 8)*tmp_r8( 8)   &
+                        )
+                kk = kk + 1
+
+                End Do
+                kk_phi = kk_phi + 1
+            end Do
+            kk_eta = kk_eta + 1
+        end Do
+
+        crit_min(jj) = minval(crit_1(0:kk-1,0:kk_phi-1,0:kk_eta-1))
+
+        If (out_amount /= "PRODUCTION" ) then
+            write(std_out, FMT_MSG_xAF0)'Minimum CR_1         : ',crit_min(jj)
+        End If
+        
+        If ( (abs(crit_min(jj-1)-crit_min(jj)) < num_zero) .OR. (jj >= 16)) Exit
+
+        jj = jj + 1
+
+    End Do
+
+    ! Be aware that minloc starts off at field index 1 !!!
+    mlc = minloc(crit_1(0:kk-1,0:kk_phi-1,0:kk_eta-1))-1
+
+    alpha = Real( ang(1,mlc(1),mlc(2),mlc(3)),rk ) * pi / (180._rk*(10._rk**jj-1))
+    phi   = Real( ang(2,mlc(1),mlc(2),mlc(3)),rk ) * pi / (180._rk*(10._rk**jj-1))
+    eta   = Real( ang(3,mlc(1),mlc(2),mlc(3)),rk ) * pi / (180._rk*(10._rk**jj-1))
+
+    n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ] 
+    n = n / sqrt(sum(n*n))
+
+    If (out_amount /= "PRODUCTION" ) then
+        write(std_out,*)
+        Write(std_out,FMT_MSG_xAI0) "Solution converged after : ",jj," iterations"
+        Write(std_out,FMT_MSG_AxF0) "With final citerion 1    : ",&
+            minval(crit_1(0:kk-1,0:kk_phi-1,0:kk_eta-1)),crit_1(mlc(1),mlc(2),mlc(3))
+        Write(std_out,FMT_MSG_xAF0)  "With final epsilon       : ", crit_min(jj-1)-crit_min(jj)
+        Write(std_out,FMT_MSG_xAF0) "Final rotation angle  is : ", alpha
+        Write(std_out,FMT_MSG_AxF0) "Final rotation vector is : ", n
+        Write(std_out,*)
+    End If
+    
+    !------------------------------------------------------------------------------
+    ! Rotation Angle CR_1
+    !------------------------------------------------------------------------------
+    tmp_real_fd1 = alpha 
+
+
+        
+    !=========================================================================
+    !== Inlining of EE =======================================================
+    aa = rot_alg(n,alpha)
+    BB = tra_R6(aa)
+    EE = matmul(matmul(transpose(BB),EE_Orig),BB)
+
+    If (out_amount /= "PRODUCTION" ) then
+        Call Write_matrix(std_out, "Backrotated anisotropic stiffness CR_1", EE, fmti='std', unit='MPa')
+    End If
+    
+    !=========================================================
+
+    If ( (EE(1,1) < EE(2,2)) .AND.  &
+            (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3))) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"123"
+        Continue
+        
+    Else If ( (EE(1,1) < EE(2,2)) .AND.  &
+            (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) > EE(3,3))) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"132"
+
+        ! 132 => 123 ********
+        n = aa(:,1)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+    Else If ( (EE(1,1) < EE(2,2)) .AND.  &
+            (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3))) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"231"
+
+        ! 231 => 132 ********
+        n = aa(:,2)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)
+
+        ! 132 => 123 ********
+        n = aa(:,1)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+    Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+            (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"213"
+
+        ! 213 => 123 ********
+        n = aa(:,3)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+    Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+            (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"312"
+
+        ! 312 => 132 ********
+        n = aa(:,3)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+        ! 132 => 123 ********
+        n = aa(:,1)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)  
+
+    Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+            (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"321"
+
+        ! 321 => 123 ********
+        n = aa(:,2)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)  
+
+    End If
+
+    BB = tra_R6(aa)
+    EE = matmul(matmul(transpose(BB),EE_Orig),BB)
+
+    If (out_amount /= "PRODUCTION" ) then
+        Call Write_matrix(std_out, "Final coordinate system CR_1", aa, fmti='std')
+        Call Write_matrix(std_out, "Inlined anisotropic stiffness CR_1", EE, fmti='std', unit='MPa')
+    End If
+
+
+    If (out_amount /= "PRODUCTION" ) then
+        Call Write_matrix(std_out, "Optimized Effective stiffness CR_1", EE, fmti='std')
+    End If
+
+
+    !=========================================================================
+    !== Iteration of Crit_2 ==================================================
+    EE = EE_Orig
+
+    kk_eta = 0
+    kk_phi = 0
+    kk = 0
+
+    Do ii_eta = 0 , 90 , 1
+        kk_phi = 0
+        Do ii_phi = 0 , 180 , 1
+            kk = 0
+            Do ii = 0 , 180 , 1
+                ang(:,kk,kk_phi,kk_eta)  = [ii,ii_phi,ii_eta]
+                kk = kk + 1
+            End Do
+            kk_phi = kk_phi + 1
+        End Do
+        kk_eta = kk_eta + 1
+    End Do
+
+    crit_min = 0._rk
+    crit_min(0) = minval(crit_2)
+
+    mlc = minloc(crit_2)-1
+
+    If (out_amount /= "PRODUCTION" ) then
+        write(std_out,FMT_MSG_AxI0)'Initial Minloc  CR_2: ',mlc
+        write(std_out,FMT_MSG_xAF0) 'Initial Minimum CR_2: ',crit_min(0)
+    End If
+    
+    jj = 1
+
+    div_10_exp_jj = pi_div_180
+
+    Do 
+
+        mlc = minloc(crit_2(0:kk-1,0:kk_phi-1,0:kk_eta-1))-1
+
+        s_loop = (ang(:,mlc(1),mlc(2),mlc(3))-1)*10
+        e_loop = (ang(:,mlc(1),mlc(2),mlc(3))+1)*10
+
+        kk_eta = 0
+        kk_phi = 0
+        kk = 0
+
+        If (out_amount /= "PRODUCTION" ) then
+            write(std_out,FMT_MSG_AxI0)'Iteration : ',jj
+            write(std_out,FMT_MSG_AxI0)'Loop start: ',s_loop
+            write(std_out,FMT_MSG_AxI0)'Loop end  : ',e_loop
+        End If
+        
+        div_10_exp_jj = div_10_exp_jj * 0.1_rk
+
+        Do ii_eta = s_loop(3), e_loop(3)
+
+            kk_phi = 0
+
+            Do ii_phi = s_loop(2), e_loop(2)
+
+                kk = 0
+
+                Do ii = s_loop(1), e_loop(1)
+
+                alpha = Real(ii,rk)     * div_10_exp_jj
+                phi   = Real(ii_phi,rk) * div_10_exp_jj
+                eta   = Real(ii_eta,rk) * div_10_exp_jj
+
+                n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ] 
+
+                cos_alpha           = cos(alpha)
+                sin_alpha           = sin(alpha)
+                One_Minus_cos_alpha = 1._8 - cos_alpha
+                n12                 = n(1)*n(2)
+                n13                 = n(1)*n(3)                
+                n23                 = n(2)*n(3)
+
+                aa(1,1) = cos_alpha + n(1)*n(1)* One_Minus_cos_alpha
+                aa(2,2) = cos_alpha + n(2)*n(2)* One_Minus_cos_alpha
+                aa(3,3) = cos_alpha + n(3)*n(3)* One_Minus_cos_alpha 
+
+                aa(1,2) = n12 * One_Minus_cos_alpha  - n(3) * sin_alpha
+                aa(2,1) = n12 * One_Minus_cos_alpha  + n(3) * sin_alpha
+
+                aa(1,3) = n13 * One_Minus_cos_alpha  + n(2) * sin_alpha
+                aa(3,1) = n13 * One_Minus_cos_alpha  - n(2) * sin_alpha
+
+                aa(2,3) = n23 * One_Minus_cos_alpha  - n(1) * sin_alpha
+                aa(3,2) = n23 * One_Minus_cos_alpha  + n(1) * sin_alpha
+
+                BB(:,1) = [ aa(1,1)*aa(1,1) , aa(2,1)*aa(2,1) , aa(3,1)*aa(3,1) , &
+                        sq2*aa(2,1)*aa(1,1) , sq2*aa(1,1)*aa(3,1) , sq2*aa(2,1)*aa(3,1) ]
+                BB(:,2) = [ aa(1,2)*aa(1,2) , aa(2,2)*aa(2,2) , aa(3,2)*aa(3,2) , &
+                        sq2*aa(2,2)*aa(1,2) , sq2*aa(1,2)*aa(3,2) , sq2*aa(2,2)*aa(3,2) ]
+                BB(:,3) = [ aa(1,3)*aa(1,3) , aa(2,3)*aa(2,3) , aa(3,3)*aa(3,3) , &
+                        sq2*aa(2,3)*aa(1,3) , sq2*aa(1,3)*aa(3,3) , sq2*aa(2,3)*aa(3,3) ]
+                BB(:,4) = [ sq2*aa(1,1)*aa(1,2) , sq2*aa(2,1)*aa(2,2) , sq2*aa(3,1)*aa(3,2) , &
+                        aa(2,1)*aa(1,2)+aa(2,2)*aa(1,1) , aa(1,1)*aa(3,2)+aa(1,2)*aa(3,1) , &
+                        aa(2,1)*aa(3,2)+aa(2,2)*aa(3,1) ]
+                BB(:,5) = [ sq2*aa(1,1)*aa(1,3) , sq2*aa(2,1)*aa(2,3) , sq2*aa(3,1)*aa(3,3) , &
+                        aa(2,1)*aa(1,3)+aa(2,3)*aa(1,1) , aa(1,1)*aa(3,3)+aa(1,3)*aa(3,1) , &
+                        aa(2,1)*aa(3,3)+aa(2,3)*aa(3,1) ]
+                BB(:,6) = [ sq2*aa(1,2)*aa(1,3) , sq2*aa(2,2)*aa(2,3) , sq2*aa(3,2)*aa(3,3) , &
+                        aa(2,2)*aa(1,3)+aa(2,3)*aa(1,2) , aa(1,2)*aa(3,3)+aa(1,3)*aa(3,2) , &
+                        aa(2,2)*aa(3,3)+aa(2,3)*aa(3,2) ]
+
+                tmp_r12(1) = &
+                        BB(6,1) * &
+                        (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
+                        BB(5,1) * &
+                        (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
+                        BB(4,1) * &
+                        (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
+                        BB(3,1) * &
+                        (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
+                        BB(2,1) * &
+                        (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
+                        BB(1,1) * &
+                        (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
+                tmp_r12(2) =  &
+                        BB(6,1) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                        BB(5,1) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                        BB(4,1) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                        BB(3,1) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                        BB(2,1) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                        BB(1,1) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12(3) = &
+                        BB(6,1) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                        BB(5,1) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                        BB(4,1) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                        BB(3,1) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                        BB(2,1) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                        BB(1,1) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12(4) =  &
+                        BB(6,2) * &
+                        (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
+                        BB(5,2) * &
+                        (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
+                        BB(4,2) * &
+                        (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
+                        BB(3,2) * &
+                        (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
+                        BB(2,2) * &
+                        (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
+                        BB(1,2) * &
+                        (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
+                tmp_r12( 5) = &
+                        BB(6,2) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                        BB(5,2) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                        BB(4,2) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                        BB(3,2) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                        BB(2,2) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                        BB(1,2) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12( 6) = &
+                        BB(6,2) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                        BB(5,2) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                        BB(4,2) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                        BB(3,2) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                        BB(2,2) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                        BB(1,2) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12( 7) = &
+                        BB(6,3) * &
+                        (BB(6,4)*EE(6,6)+BB(5,4)*EE(6,5)+BB(4,4)*EE(6,4)+BB(3,4)*EE(6,3)+BB(2,4)*EE(6,2)+BB(1,4)*EE(6,1)) + &
+                        BB(5,3) * &
+                        (EE(5,6)*BB(6,4)+BB(5,4)*EE(5,5)+BB(4,4)*EE(5,4)+BB(3,4)*EE(5,3)+BB(2,4)*EE(5,2)+BB(1,4)*EE(5,1)) + &
+                        BB(4,3) * &
+                        (EE(4,6)*BB(6,4)+EE(4,5)*BB(5,4)+BB(4,4)*EE(4,4)+BB(3,4)*EE(4,3)+BB(2,4)*EE(4,2)+BB(1,4)*EE(4,1)) + &
+                        BB(3,3) * &
+                        (EE(3,6)*BB(6,4)+EE(3,5)*BB(5,4)+EE(3,4)*BB(4,4)+EE(3,3)*BB(3,4)+BB(2,4)*EE(3,2)+BB(1,4)*EE(3,1)) + &
+                        BB(2,3) * &
+                        (EE(2,6)*BB(6,4)+EE(2,5)*BB(5,4)+EE(2,4)*BB(4,4)+EE(2,3)*BB(3,4)+EE(2,2)*BB(2,4)+BB(1,4)*EE(2,1)) + &
+                        BB(1,3) * &
+                        (EE(1,6)*BB(6,4)+EE(1,5)*BB(5,4)+EE(1,4)*BB(4,4)+EE(1,3)*BB(3,4)+EE(1,2)*BB(2,4)+EE(1,1)*BB(1,4))
+                tmp_r12( 8) = &
+                        BB(6,3) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                        BB(5,3) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                        BB(4,3) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                        BB(3,3) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                        BB(2,3) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                        BB(1,3) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12( 9) = &
+                        BB(6,3) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                        BB(5,3) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                        BB(4,3) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                        BB(3,3) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                        BB(2,3) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                        BB(1,3) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12(10) = &
+                        BB(6,4) * &
+                        (BB(6,5)*EE(6,6)+BB(5,5)*EE(6,5)+BB(4,5)*EE(6,4)+BB(3,5)*EE(6,3)+BB(2,5)*EE(6,2)+BB(1,5)*EE(6,1)) + &
+                        BB(5,4) * &
+                        (EE(5,6)*BB(6,5)+BB(5,5)*EE(5,5)+BB(4,5)*EE(5,4)+BB(3,5)*EE(5,3)+BB(2,5)*EE(5,2)+BB(1,5)*EE(5,1)) + &
+                        BB(4,4) * &
+                        (EE(4,6)*BB(6,5)+EE(4,5)*BB(5,5)+EE(4,4)*BB(4,5)+BB(3,5)*EE(4,3)+BB(2,5)*EE(4,2)+BB(1,5)*EE(4,1)) + &
+                        BB(3,4) * &
+                        (EE(3,6)*BB(6,5)+EE(3,5)*BB(5,5)+EE(3,4)*BB(4,5)+EE(3,3)*BB(3,5)+BB(2,5)*EE(3,2)+BB(1,5)*EE(3,1)) + &
+                        BB(2,4) * &
+                        (EE(2,6)*BB(6,5)+EE(2,5)*BB(5,5)+EE(2,4)*BB(4,5)+EE(2,3)*BB(3,5)+EE(2,2)*BB(2,5)+BB(1,5)*EE(2,1)) + &
+                        BB(1,4) * &
+                        (EE(1,6)*BB(6,5)+EE(1,5)*BB(5,5)+EE(1,4)*BB(4,5)+EE(1,3)*BB(3,5)+EE(1,2)*BB(2,5)+EE(1,1)*BB(1,5))
+                tmp_r12(11) = &
+                        BB(6,4) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                        BB(5,4) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                        BB(4,4) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                        BB(3,4) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                        BB(2,4) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                        BB(1,4) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+                tmp_r12(12) = &
+                        BB(6,5) * &
+                        (BB(6,6)*EE(6,6)+BB(5,6)*EE(6,5)+BB(4,6)*EE(6,4)+BB(3,6)*EE(6,3)+BB(2,6)*EE(6,2)+BB(1,6)*EE(6,1)) + &
+                        BB(5,5) * &
+                        (EE(5,6)*BB(6,6)+EE(5,5)*BB(5,6)+BB(4,6)*EE(5,4)+BB(3,6)*EE(5,3)+BB(2,6)*EE(5,2)+BB(1,6)*EE(5,1)) + &
+                        BB(4,5) * &
+                        (EE(4,6)*BB(6,6)+EE(4,5)*BB(5,6)+EE(4,4)*BB(4,6)+BB(3,6)*EE(4,3)+BB(2,6)*EE(4,2)+BB(1,6)*EE(4,1)) + &
+                        BB(3,5) * &
+                        (EE(3,6)*BB(6,6)+EE(3,5)*BB(5,6)+EE(3,4)*BB(4,6)+EE(3,3)*BB(3,6)+BB(2,6)*EE(3,2)+BB(1,6)*EE(3,1)) + &
+                        BB(2,5) * &
+                        (EE(2,6)*BB(6,6)+EE(2,5)*BB(5,6)+EE(2,4)*BB(4,6)+EE(2,3)*BB(3,6)+EE(2,2)*BB(2,6)+BB(1,6)*EE(2,1)) + &
+                        BB(1,5) * &
+                        (EE(1,6)*BB(6,6)+EE(1,5)*BB(5,6)+EE(1,4)*BB(4,6)+EE(1,3)*BB(3,6)+EE(1,2)*BB(2,6)+EE(1,1)*BB(1,6))
+
+                ang(:,kk,kk_phi,kk_eta)  = [ii,ii_phi,ii_eta]
+
+                crit_2(kk,kk_phi,kk_eta) = (&
+                        tmp_r12( 1)*tmp_r12( 1) + tmp_r12( 2)*tmp_r12( 2) + tmp_r12( 3)*tmp_r12( 3) + &
+                        tmp_r12( 4)*tmp_r12( 4) + tmp_r12( 5)*tmp_r12( 5) + tmp_r12( 6)*tmp_r12( 6) + &
+                        tmp_r12( 7)*tmp_r12( 7) + tmp_r12( 8)*tmp_r12( 8) + tmp_r12( 9)*tmp_r12( 9) + &
+                        tmp_r12(10)*tmp_r12(10) + tmp_r12(11)*tmp_r12(11) + &
+                        tmp_r12(12)*tmp_r12(12) &
+                        )
+                kk = kk + 1
+
+                End Do
+                kk_phi = kk_phi + 1
+            end Do
+            kk_eta = kk_eta + 1
+        end Do
+
+        crit_min(jj) = minval(crit_2(0:kk-1,0:kk_phi-1,0:kk_eta-1))
+
+        !write(std_out,FMT_MSG_AF0)'Minimum CR_2         : ',crit_min(jj)
+        If (out_amount /= "PRODUCTION" ) then
+            write(std_out,FMT_MSG_AxF0)'Minimum CR_2         : ', crit_min(jj)
+            write(std_out,FMT_MSG_AxI0)'Minloc  CR_2         : ', minloc(crit_2(0:kk-1,0:kk_phi-1,0:kk_eta-1))
+            write(std_out,FMT_MSG_AxI0)'kk, kk_phi, kk_eta   : ', kk,kk_phi,kk_eta
+        End If
+        
+        If ( (abs(crit_min(jj-1)-crit_min(jj)) < num_zero) .OR. (jj >= 16)) Exit
+
+        jj = jj + 1
+
+    End Do
+
+    mlc = minloc(crit_2(0:kk-1,0:kk_phi-1,0:kk_eta-1))-1
+
+    alpha = Real( ang(1,mlc(1),mlc(2),mlc(3)),rk ) * pi / (180._rk*(10._rk**jj-1))
+    phi   = Real( ang(2,mlc(1),mlc(2),mlc(3)),rk ) * pi / (180._rk*(10._rk**jj-1))
+    eta   = Real( ang(3,mlc(1),mlc(2),mlc(3)),rk ) * pi / (180._rk*(10._rk**jj-1))
+
+    n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ] 
+    n = n / sqrt(sum(n*n))
+
+    If (out_amount /= "PRODUCTION" ) then
+        write(std_out, *)
+        Write(std_out, FMT_MSG_xAI0) "Solution converged after : ", jj," iterations"
+        Write(std_out, FMT_MSG_AxF0) "With final citerion 2    : ", minval(crit_2(1:kk-2, 1:kk_phi-2, 1:kk_eta-2))
+        Write(std_out, FMT_MSG_AxF0) "With final epsilon       : ", crit_min(jj-1)-crit_min(jj)
+        Write(std_out, FMT_MSG_AxF0) "Final rotation angle  is : ", alpha
+        Write(std_out, FMT_MSG_AxF0) "Final rotation vector is : ", n
+        Write(std_out, *)
+    End If
+    
+    !------------------------------------------------------------------------------
+    ! Rotation Angle CR_2
+    !------------------------------------------------------------------------------
+    tmp_real_fd1 = alpha 
+
+
+    
+    !------------------------------------------------------------------------------
+    ! Inlining of EE
+    !------------------------------------------------------------------------------
+    aa = rot_alg(n,alpha)
+    BB = tra_R6(aa)
+    EE = matmul(matmul(transpose(BB),EE),BB)
+
+    If ( (EE(1,1) < EE(2,2)) .AND.  &
+            (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3))         ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"123"
+        continue
+        
+    Else If ( (EE(1,1) < EE(2,2)) .AND.  &
+            (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"132"
+
+        ! 132 => 123 ********
+        n = aa(:,1)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+    Else If ( (EE(1,1) < EE(2,2)) .AND.  &
+            (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"231"
+
+        ! 231 => 132 ********
+        n = aa(:,2)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)
+
+        ! 132 => 123 ********
+        n = aa(:,1)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+    Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+            (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"213"
+
+        ! 213 => 123 ********
+        n = aa(:,3)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+    Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+            (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"312"
+
+        ! 312 => 132 ********
+        n = aa(:,3)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)   
+
+        ! 132 => 123 ********
+        n = aa(:,1)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)  
+
+    Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+            (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+
+        If (out_amount /= "PRODUCTION" ) write(std_out,*)"321"
+
+        ! 321 => 123 ********
+        n = aa(:,2)
+        alpha = pi/2
+        aa = matmul(rot_alg(n,alpha),aa)  
+
+    End If
+
+    !------------------------------------------------------------------------------
+    ! Optimized Effective stiffness CR_2
+    !------------------------------------------------------------------------------
+    BB = tra_R6(aa)
+    EE = matmul(matmul(transpose(BB),EE_Orig),BB)
+
+
+
+
+    If (out_amount /= "PRODUCTION" ) &
+            Call Write_matrix(std_out, "Backrotated anisotropic stiffness CR_2", EE, fmti='spl', unit='MPa')
+
+
+
+    tout%mat = EE
+
+    tout%dmn = tin%dmn
+    tout%density = tin%density
+    tout%doa_zener = doa_zener(tout%mat)
+    tout%doa_gebert = doa_gebert(tout%mat)
+    tout%density = gebert_density_voigt(tout%mat, bone%E, bone%nu)
+    tout%sym = sym
+
+      
+
 
             !------------------------------------------------------------------------------
             ! At the end of the second step, the results acutally get written to the 
@@ -694,7 +1741,6 @@ ELSE
 
             crs_counter = crs_counter + 1_mik
 
-        END DO
 
         CALL MPI_SEND(tlcl_res, INT(crs, mik), MPI_tensor_2nd_rank_R66, 0_mik, &
             INT(tout%dmn, mik), MPI_COMM_WORLD, ierr)

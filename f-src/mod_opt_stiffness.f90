@@ -203,6 +203,9 @@ DO kk = 1_ik, steps(3)+1_ik
 phi = phi + intervall(3)
 END DO
 
+! Next line on cli
+WRITE(std_out, '(A)') ""
+
 !-------------------------------------------------------------------------------
 ! Find the best position (min or max) within the criteria space.
 !-------------------------------------------------------------------------------
@@ -342,5 +345,6 @@ ELSE IF((mat(1,1)<mat(2,2)) .AND. (mat(1,1)<mat(3,3)) .AND. (mat(2,2)<mat(3,3)))
 END IF
 
 END SUBROUTINE tilt_tensor
+
 
 END MODULE opt_stiffness
