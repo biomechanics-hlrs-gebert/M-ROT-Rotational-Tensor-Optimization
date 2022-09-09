@@ -167,26 +167,25 @@ ALLOCATE(statInt(size_mpi))
 ! Redirect std_out into a file in case std_out is not useful by environment.
 ! Place these lines before handle_lock_file :-)
 !------------------------------------------------------------------------------
-CALL MPI_GET_ADDRESS(dummy%dmn, disp(1), ierr) 
-CALL MPI_GET_ADDRESS(dummy%crit, disp(2), ierr) 
+CALL MPI_GET_ADDRESS(dummy%crit, disp(1), ierr) 
+CALL MPI_GET_ADDRESS(dummy%dmn, disp(2), ierr) 
 CALL MPI_GET_ADDRESS(dummy%density, disp(3), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(4), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(5), ierr) 
 CALL MPI_GET_ADDRESS(dummy%sym, disp(6), ierr) 
 CALL MPI_GET_ADDRESS(dummy%pos, disp(7), ierr) 
 CALL MPI_GET_ADDRESS(dummy%mat, disp(8), ierr) 
-	
+
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1) = 1
-blocklen(2) = scl
-blocklen(3:6) = 1
+blocklen(1) = scl
+blocklen(2:6) = 1
 blocklen(7) = 3 
 blocklen(8) = 36 
 
-dtype(1) = MPI_INTEGER8 
-dtype(2) = MPI_CHAR
+dtype(1) = MPI_CHARACTER
+dtype(2) = MPI_INTEGER8 
 dtype(3:8) = MPI_DOUBLE_PRECISION
 
 CALL MPI_TYPE_CREATE_STRUCT(8_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
@@ -394,10 +393,10 @@ intervall(2,:) = 0.025_rk
 steps(1,:) = 180_ik
 steps(2,:) = 80_ik
 
-IF(out_amount=="DEBUG") THEN
-    steps(1,:) = 30_ik
-    steps(2,:) = 30_ik
-END IF
+! IF(out_amount=="DEBUG") THEN
+!     steps(1,:) = 30_ik
+!     steps(2,:) = 30_ik
+! END IF
 
 !------------------------------------------------------------------------------
 ! Why 8? Only 4 entries in array. 
@@ -614,7 +613,7 @@ ELSE
             !------------------------------------------------------------------------------
             dig = tin%pos 
 
-            DO kk = 1_ik, 2_ik
+            DO kk = 1_ik, 1_ik
                 IF(out_amount == "DEBUG") THEN
                     WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
                     WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization step: ", kk
