@@ -281,8 +281,8 @@ IF(my_rank == 0) THEN
     ! Check and open the input file; Modify the Meta-Filename / Basename
     ! Define the new application name first
     !------------------------------------------------------------------------------
-    global_meta_prgrm_mstr_app = 'rot'
-    global_meta_program_keyword = 'ROT_TENSOR_OPT'
+    global_meta_prgrm_mstr_app = 'rot-dtc'
+    global_meta_program_keyword = 'DTC_TENSOR_OPT'
     CALL meta_append(m_rry, size_mpi, stat)
     
     !------------------------------------------------------------------------------
@@ -1386,6 +1386,9 @@ ELSE
                 eta   = Real(ii_eta,rk) * div_10_exp_jj
 
                 n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ] 
+                ! n = n / sqrt(n(1)*n(1)+n(2)*n(2)+n(3)*n(3))
+
+                ! aa = rot_alg(n,alpha)
 
                 cos_alpha           = cos(alpha)
                 sin_alpha           = sin(alpha)
@@ -1406,6 +1409,8 @@ ELSE
 
                 aa(2,3) = n23 * One_Minus_cos_alpha  - n(1) * sin_alpha
                 aa(3,2) = n23 * One_Minus_cos_alpha  + n(1) * sin_alpha
+
+                !BB = tra_R6(aa)
 
                 BB(:,1) = [ aa(1,1)*aa(1,1) , aa(2,1)*aa(2,1) , aa(3,1)*aa(3,1) , &
                         sq2*aa(2,1)*aa(1,1) , sq2*aa(1,1)*aa(3,1) , sq2*aa(2,1)*aa(3,1) ]
@@ -1621,6 +1626,18 @@ ELSE
         n = [cos(phi)*sin(eta) , sin(phi)*sin(eta) , cos(eta) ] 
         n = n / sqrt(sum(n*n))
 
+        !------------------------------------------------------------------------------
+        ! Inlining of EE
+        !------------------------------------------------------------------------------
+        aa = rot_alg(n,alpha)
+        BB = tra_R6(aa)
+        EE = matmul(matmul(transpose(BB),EE),BB)
+
+        !------------------------------------------------------------------------------
+        ! Rotation Angle CR_2
+        !------------------------------------------------------------------------------
+        tmp_real_fd1 = alpha 
+
         If (out_amount /= "PRODUCTION" ) then
             write(std_out, *)
             Write(std_out, FMT_MSG_xAI0) "Solution converged after : ", jj," iterations"
@@ -1631,93 +1648,82 @@ ELSE
             Write(std_out, *)
         End If
         
-        !------------------------------------------------------------------------------
-        ! Rotation Angle CR_2
-        !------------------------------------------------------------------------------
-        tmp_real_fd1 = alpha 
 
 
-        
-        !------------------------------------------------------------------------------
-        ! Inlining of EE
-        !------------------------------------------------------------------------------
-        aa = rot_alg(n,alpha)
-        BB = tra_R6(aa)
-        EE = matmul(matmul(transpose(BB),EE),BB)
 
-        If ( (EE(1,1) < EE(2,2)) .AND.  &
-                (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3))         ) then
+        ! If ( (EE(1,1) < EE(2,2)) .AND.  &
+        !         (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3))         ) then
 
-            If (out_amount /= "PRODUCTION" ) write(std_out,*)"123"
-            continue
+        !     If (out_amount /= "PRODUCTION" ) write(std_out,*)"123"
+        !     continue
             
-        Else If ( (EE(1,1) < EE(2,2)) .AND.  &
-                (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+        ! Else If ( (EE(1,1) < EE(2,2)) .AND.  &
+        !         (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
 
-            If (out_amount /= "PRODUCTION" ) write(std_out,*)"132"
+        !     If (out_amount /= "PRODUCTION" ) write(std_out,*)"132"
 
-            ! 132 => 123 ********
-            n = aa(:,1)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)   
+        !     ! 132 => 123 ********
+        !     n = aa(:,1)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)   
 
-        Else If ( (EE(1,1) < EE(2,2)) .AND.  &
-                (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+        ! Else If ( (EE(1,1) < EE(2,2)) .AND.  &
+        !         (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
 
-            If (out_amount /= "PRODUCTION" ) write(std_out,*)"231"
+        !     If (out_amount /= "PRODUCTION" ) write(std_out,*)"231"
 
-            ! 231 => 132 ********
-            n = aa(:,2)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)
+        !     ! 231 => 132 ********
+        !     n = aa(:,2)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)
 
-            ! 132 => 123 ********
-            n = aa(:,1)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)   
+        !     ! 132 => 123 ********
+        !     n = aa(:,1)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)   
 
-        Else If ( (EE(1,1) > EE(2,2)) .AND.  &
-                (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
+        ! Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+        !         (EE(1,1) < EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
 
-            If (out_amount /= "PRODUCTION" ) write(std_out,*)"213"
+        !     If (out_amount /= "PRODUCTION" ) write(std_out,*)"213"
 
-            ! 213 => 123 ********
-            n = aa(:,3)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)   
+        !     ! 213 => 123 ********
+        !     n = aa(:,3)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)   
 
-        Else If ( (EE(1,1) > EE(2,2)) .AND.  &
-                (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
+        ! Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+        !         (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) < EE(3,3)) ) then
 
-            If (out_amount /= "PRODUCTION" ) write(std_out,*)"312"
+        !     If (out_amount /= "PRODUCTION" ) write(std_out,*)"312"
 
-            ! 312 => 132 ********
-            n = aa(:,3)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)   
+        !     ! 312 => 132 ********
+        !     n = aa(:,3)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)   
 
-            ! 132 => 123 ********
-            n = aa(:,1)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)  
+        !     ! 132 => 123 ********
+        !     n = aa(:,1)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)  
 
-        Else If ( (EE(1,1) > EE(2,2)) .AND.  &
-                (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
+        ! Else If ( (EE(1,1) > EE(2,2)) .AND.  &
+        !         (EE(1,1) > EE(3,3)) .AND.  (EE(2,2) > EE(3,3)) ) then
 
-            If (out_amount /= "PRODUCTION" ) write(std_out,*)"321"
+        !     If (out_amount /= "PRODUCTION" ) write(std_out,*)"321"
 
-            ! 321 => 123 ********
-            n = aa(:,2)
-            alpha = pi/2
-            aa = matmul(rot_alg(n,alpha),aa)  
+        !     ! 321 => 123 ********
+        !     n = aa(:,2)
+        !     alpha = pi/2
+        !     aa = matmul(rot_alg(n,alpha),aa)  
 
-        End If
+        ! End If
 
         !------------------------------------------------------------------------------
         ! Optimized Effective stiffness CR_2
         !------------------------------------------------------------------------------
-        BB = tra_R6(aa)
-        EE = matmul(matmul(transpose(BB),EE_Orig),BB)
+        ! BB = tra_R6(aa)
+        ! EE = matmul(matmul(transpose(BB),EE_Orig),BB)
 
 
 
