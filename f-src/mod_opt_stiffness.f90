@@ -172,11 +172,17 @@ END IF
 phi = dig(3) - ((intervall(3) * steps(3)) / 2._rk)
 DO kk = 1_ik, steps(3)+1_ik
 
+    ! IF ((phi < -45)  .OR. (phi > 45)) CYCLE
+
     eta = dig(2) - ((intervall(2) * steps(2)) / 2._rk)
     DO jj = 1_ik, steps(2)+1_ik
 
+        ! IF ((eta < -45)  .OR. (eta > 45)) CYCLE
+
         alpha = dig(1) - ((intervall(1) * steps(1)) / 2._rk)
         DO ii = 1_ik, steps(1)+1_ik
+
+            ! IF ((alpha < -45)  .OR. (alpha > 45)) CYCLE
 
             CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , tmp_r6x6)
 

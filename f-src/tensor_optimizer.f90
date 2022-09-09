@@ -387,7 +387,7 @@ CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 !------------------------------------------------------------------------------
 ! Shorten turnaround times
 !------------------------------------------------------------------------------
-intervall(1,:) = 1._rk
+intervall(1,:) = 0.01_rk
 intervall(2,:) = 0.025_rk
 
 steps(1,:) = 180_ik
