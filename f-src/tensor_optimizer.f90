@@ -145,9 +145,11 @@ INTEGER(mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
 INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
 INTEGER(mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(mik), DIMENSION(8) :: blocklen, dtype 
-INTEGER(MPI_ADDRESS_KIND) :: disp(8), base
 
+
+
+INTEGER(mik), DIMENSION(9) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(9), base
 
 
 
@@ -206,9 +208,6 @@ Allocate(crit_1(0:180,0:180,0:90), crit_2(0:180,0:180,0:90))
 
 
 
-
-
-
 ! Initialize MPI Environment
 CALL MPI_INIT(ierr)
 CALL mpi_err(ierr,"MPI_INIT failed.")
@@ -221,7 +220,6 @@ CALL mpi_err(ierr,"MPI_COMM_SIZE couldn't be retrieved")
 
 IF (size_mpi < 2) CALL print_err_stop(std_out, "At least two ranks required to execute this program.", 1)
 
-
 ALLOCATE(statInt(size_mpi))
 
 !------------------------------------------------------------------------------
@@ -229,32 +227,33 @@ ALLOCATE(statInt(size_mpi))
 ! Place these lines before handle_lock_file :-)
 !------------------------------------------------------------------------------
 CALL MPI_GET_ADDRESS(dummy%dmn, disp(1), ierr) 
-CALL MPI_GET_ADDRESS(dummy%crit, disp(2), ierr) 
+CALL MPI_GET_ADDRESS(dummy%sym, disp(2), ierr) 
 CALL MPI_GET_ADDRESS(dummy%density, disp(3), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(4), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(5), ierr) 
 CALL MPI_GET_ADDRESS(dummy%sym, disp(6), ierr) 
 CALL MPI_GET_ADDRESS(dummy%pos, disp(7), ierr) 
 CALL MPI_GET_ADDRESS(dummy%mat, disp(8), ierr) 
+CALL MPI_GET_ADDRESS(dummy%crit, disp(9), ierr) 
 	
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1) = 1
-blocklen(2) = scl
-blocklen(3:6) = 1
+blocklen(1:6) = 1
 blocklen(7) = 3 
 blocklen(8) = 36 
+blocklen(9) = scl
 
 dtype(1) = MPI_INTEGER8 
-dtype(2) = MPI_CHAR
-dtype(3:8) = MPI_DOUBLE_PRECISION
+dtype(2:8) = MPI_DOUBLE_PRECISION
+dtype(9) = MPI_CHARACTER
 
-CALL MPI_TYPE_CREATE_STRUCT(8_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(9_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be commited.")
+
 
 
 !------------------------------------------------------------------------------
