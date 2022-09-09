@@ -148,8 +148,8 @@ INTEGER(mik) :: MPI_tensor_2nd_rank_R66
 
 
 
-INTEGER(mik), DIMENSION(9) :: blocklen, dtype 
-INTEGER(MPI_ADDRESS_KIND) :: disp(9), base
+INTEGER(mik), DIMENSION(8) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(8), base
 
 
 
@@ -226,33 +226,33 @@ ALLOCATE(statInt(size_mpi))
 ! Redirect std_out into a file in case std_out is not useful by environment.
 ! Place these lines before handle_lock_file :-)
 !------------------------------------------------------------------------------
-CALL MPI_GET_ADDRESS(dummy%dmn, disp(1), ierr) 
-CALL MPI_GET_ADDRESS(dummy%sym, disp(2), ierr) 
+CALL MPI_GET_ADDRESS(dummy%crit, disp(1), ierr) 
+CALL MPI_GET_ADDRESS(dummy%dmn, disp(2), ierr) 
 CALL MPI_GET_ADDRESS(dummy%density, disp(3), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(4), ierr) 
 CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(5), ierr) 
 CALL MPI_GET_ADDRESS(dummy%sym, disp(6), ierr) 
 CALL MPI_GET_ADDRESS(dummy%pos, disp(7), ierr) 
 CALL MPI_GET_ADDRESS(dummy%mat, disp(8), ierr) 
-CALL MPI_GET_ADDRESS(dummy%crit, disp(9), ierr) 
-	
+
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1:6) = 1
+blocklen(1) = scl
+blocklen(2:6) = 1
 blocklen(7) = 3 
 blocklen(8) = 36 
-blocklen(9) = scl
 
-dtype(1) = MPI_INTEGER8 
-dtype(2:8) = MPI_DOUBLE_PRECISION
-dtype(9) = MPI_CHARACTER
+dtype(1) = MPI_CHARACTER
+dtype(2) = MPI_INTEGER8 
+dtype(3:8) = MPI_DOUBLE_PRECISION
 
-CALL MPI_TYPE_CREATE_STRUCT(9_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(8_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be commited.")
+
 
 
 
