@@ -1,9 +1,11 @@
 
 p ROT_TENSOR_OPT
-r REQUEST_MONO          YES                                            ! YES/NO - turn on / off the optimizations
-r REQUEST_ORTH          YES                                            ! YES/NO - turn on / off the optimizations
-r REQUEST_ANI_1         YES                                            ! YES/NO - turn on / off the optimizations
-r REQUEST_ANI_2         YES                                            ! YES/NO - turn on / off the optimizations
+
+r RESOLUTION_MONO      -1.                                             ! Resolution within space of orientations negative -> off
+r RESOLUTION_ORTH       1.                                             ! Resolution within space of orientations negative -> off
+r RESOLUTION_ANI_1     -1.                                             ! Resolution within space of orientations negative -> off
+r RESOLUTION_ANI_2     -1.                                             ! Resolution within space of orientations negative -> off
+
 r EXPORT_DMN_CRIT       55                                             ! Criteria space as vtk. dmn=dmn -10=all other <0=no export
 r RESTART               N                                              ! Restart a (partly) computed project
 

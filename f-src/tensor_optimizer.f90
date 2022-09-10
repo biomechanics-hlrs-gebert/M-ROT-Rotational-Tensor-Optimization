@@ -111,7 +111,8 @@ USE auxiliaries_of_tensor_optimizer
 IMPLICIT NONE
 
 ! Parameter
-REAL   (rk), PARAMETER :: lower_thres_percentage = 0.03
+REAL(rk), PARAMETER :: lower_thres_percentage = 0.03
+REAL(rk), PARAMETER :: exec_thres = 0.0001
 
 ! Variables
 TYPE(tensor_2nd_rank_R66) :: dummy
@@ -122,20 +123,18 @@ TYPE(materialcard) :: bone
 
 CHARACTER(mcl), DIMENSION(:), ALLOCATABLE :: m_rry      
 CHARACTER(mcl) :: crit_file, cmd_arg_history='', stat=""
-CHARACTER(scl) :: restart, restart_cmd_arg, re_mono, re_orth, re_ani1, re_ani2, &
-    suf_covo, suf_mono, suf_orth, suf_ani1, suf_ani2, temp_suf, &
-    binary, dmn_no, suffix
+CHARACTER(scl) :: restart, restart_cmd_arg, binary, dmn_no, suf_files(4), suf_covo
 CHARACTER(  1) :: stg='1'
 CHARACTER(  8) :: date
 CHARACTER( 10) :: time
 
-REAL(rk) :: start, end, sym, intervall(2,3)
+REAL(rk) :: start, end, sym, exec_opt(4), swept_range(2), &
+    step_width(2), res_mono, res_orth, res_ani1, res_ani2
 
-INTEGER(ik) :: fh_covo, fh_mono, fh_orth, fh_ani1, fh_ani2, fhwcrit, &
+INTEGER(ik) :: fh_covo, &
     exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0, &
-    jj, kk, mm, invalid_entries, iostat, steps(2,3)
+    ii, jj, kk, mm, invalid_entries, iostat, steps(2,3), no_stages, fh_files(4)
 
-LOGICAL, DIMENSION(4) :: execute_optimization = .FALSE.
 LOGICAL :: print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
 
 INTEGER(mik) :: ierr, my_rank, size_mpi, mii, active, feed_ranks, crs, crs_counter
@@ -159,7 +158,9 @@ CALL mpi_err(ierr,"MPI_COMM_RANK couldn't be retrieved")
 CALL MPI_COMM_SIZE(MPI_COMM_WORLD, size_mpi, ierr)
 CALL mpi_err(ierr,"MPI_COMM_SIZE couldn't be retrieved")
 
-IF (size_mpi < 2) CALL print_err_stop(std_out, "At least two ranks required to execute this program.", 1)
+IF (size_mpi < 2) THEN
+    CALL print_err_stop(std_out, "At least two ranks required to execute this program.", 1)
+END IF 
 
 ALLOCATE(statInt(size_mpi))
 
@@ -235,21 +236,22 @@ IF(my_rank == 0) THEN
 
     CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
-    IF(out_amount=="DEBUG") WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
+    IF(out_amount=="DEBUG") THEN
+        WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
+    END IF 
 
     !------------------------------------------------------------------------------
     ! Parse input
     !------------------------------------------------------------------------------
-    CALL meta_read('REQUEST_MONO'   , m_rry, re_mono, stat); CALL mest(stat, abrt)
-    CALL meta_read('REQUEST_ORTH'   , m_rry, re_orth, stat); CALL mest(stat, abrt)
-    CALL meta_read('REQUEST_ANI_1'  , m_rry, re_ani1, stat); CALL mest(stat, abrt)
-    CALL meta_read('REQUEST_ANI_2'  , m_rry, re_ani2, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_MONO', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_ORTH', m_rry, res_orth, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_ANI1', m_rry, res_ani1, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_ANI2', m_rry, res_ani2, stat); CALL mest(stat, abrt)
+
     CALL meta_read('RESTART'        , m_rry, restart, stat); CALL mest(stat, abrt)
     CALL meta_read('YOUNG_MODULUS'  , m_rry, bone%E , stat); CALL mest(stat, abrt)
     CALL meta_read('POISSON_RATIO'  , m_rry, bone%nu, stat); CALL mest(stat, abrt)
     CALL meta_read('EXPORT_DMN_CRIT', m_rry, exp_dmn_crit, stat); CALL mest(stat, abrt)
-
-
 
     !------------------------------------------------------------------------------
     ! Restart handling
@@ -280,38 +282,21 @@ IF(my_rank == 0) THEN
     suf_covo = ".covo" ! control volume (in situ orientation)
     CALL meta_existing_ascii(fh_covo, suf_covo, covo_amnt_lines)
 
+    !------------------------------------------------------------------------------
+    ! Package user request on optimization
+    !------------------------------------------------------------------------------
+    exec_opt(1) = res_mono; fh_files(1) = give_new_unit(); suf_files(1) = "mono" 
+    exec_opt(2) = res_orth; fh_files(2) = give_new_unit(); suf_files(2) = "orth" 
+    exec_opt(3) = res_ani1; fh_files(3) = give_new_unit(); suf_files(3) = "an1" 
+    exec_opt(4) = res_ani2; fh_files(4) = give_new_unit(); suf_files(4) = "an2" 
+
     crs = 0_mik
-    IF(TRIM(re_mono) == "YES") THEN
-        fh_mono = give_new_unit()
-        suf_mono = ".mono" ! monotropic optimization 
-        CALL meta_start_ascii(fh_mono, suf_mono) 
-        execute_optimization(1) = .TRUE. 
-        crs=crs+1_mik
-    END IF
-
-    IF(TRIM(re_orth) == "YES") THEN
-        fh_orth = give_new_unit()
-        suf_orth = ".orth" ! orthotropic optimization 
-        CALL meta_start_ascii(fh_orth, suf_orth) 
-        execute_optimization(2) = .TRUE. 
-        crs=crs+1_mik
-    END IF
-
-    IF(TRIM(re_ani1) == "YES") THEN
-        fh_ani1 = give_new_unit()
-        suf_ani1 = ".an1" ! anisotropic optimization, version 1 
-        CALL meta_start_ascii(fh_ani1, suf_ani1) 
-        execute_optimization(3) = .TRUE. 
-        crs=crs+1_mik
-    END IF
-
-    IF(TRIM(re_ani2) == "YES") THEN
-        fh_ani2 = give_new_unit()
-        suf_ani2 = ".an2" ! anisotropic optimization, version 2 
-        CALL meta_start_ascii(fh_ani2, suf_ani2) 
-        execute_optimization(4) = .TRUE. 
-        crs=crs+1_mik
-    END IF
+    DO ii=1, 4
+        IF(exec_opt(ii) > exec_thres) THEN
+            crs=crs+1_mik
+            CALL meta_start_ascii(fh_files(ii), "."//TRIM(suf_files(ii))) 
+        END IF
+    END DO
 
     !------------------------------------------------------------------------------
     ! Ensure, the user is sane and report if so (or not).
@@ -361,7 +346,7 @@ IF(my_rank == 0) THEN
         
     END IF
     !------------------------------------------------------------------------------
-    ! Allocate global results array. Need to loop over execute_optimization 
+    ! Allocate global results array. Need to loop over exec_opt 
     ! to properly assign the tglbl_res(entries, :)
     !------------------------------------------------------------------------------
     ALLOCATE(tglbl_res(crs, covo_amnt_lines-1_ik))
@@ -376,33 +361,10 @@ END IF ! (my_rank == 0)
 CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(out%path    , INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-
+CALL MPI_BCAST(suf_files   , INT(scl*4_ik, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 
-!------------------------------------------------------------------------------
-! Variables are global ones, which are valid for each specific rank (!)
-!
-! The optimization is done in two steps. First, search the best orientation
-! by 1° steps. Second, search at this positon with 0.025° steps.
-!------------------------------------------------------------------------------
-! Shorten turnaround times
-!------------------------------------------------------------------------------
-intervall(1,:) = 0.01_rk
-intervall(2,:) = 0.025_rk
-
-steps(1,:) = 180_ik
-steps(2,:) = 80_ik
-
-! IF(out_amount=="DEBUG") THEN
-!     steps(1,:) = 30_ik
-!     steps(2,:) = 30_ik
-! END IF
-
-!------------------------------------------------------------------------------
-! Why 8? Only 4 entries in array. 
-! MPI_LOGICAL = 4 Byte, Fortran_Logical = 8 Byte?
-!------------------------------------------------------------------------------
-CALL MPI_BCAST(execute_optimization, 8_mik, MPI_LOGICAL, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(exec_opt, 4_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
 
 CALL MPI_BCAST(exp_dmn_crit, 1_mik, MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
@@ -590,19 +552,36 @@ ELSE
         !------------------------------------------------------------------------------
         crs_counter = 1_mik
 
+        !------------------------------------------------------------------------------
+        ! Loop over modes
+        !------------------------------------------------------------------------------
         DO jj = 1_ik, 4_ik
-            IF(.NOT. execute_optimization(jj)) CYCLE
 
-            IF(out_amount=="DEBUG") THEN
-                WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
-                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%density: ", tin%density
-                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%doa_zener: ", tin%doa_zener
-                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%doa_gebert: ", tin%doa_gebert
-                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%pos: ", tin%pos
-                WRITE(std_out, FMT_DBG_AI0AxF0) "Rank ", my_rank, " tin%mat(1,1:3): ", tin%mat(1,1:3)
-                WRITE(std_out, FMT_TXT_SEP)
-                FLUSH(std_out)
-            END IF
+            IF(exec_opt(jj) < exec_thres) CYCLE
+
+            !------------------------------------------------------------------------------
+            ! The optimization is done in two steps if the chosen step size is too small.
+            ! If the user chooses a large step size, then one stage is sufficient.
+            ! Done this way to shorten turnaround times
+            !------------------------------------------------------------------------------
+            IF (exec_opt(jj) < 2._rk) THEN
+                no_stages = 2_ik
+                
+                swept_range(1) = 180._rk
+                swept_range(2) = 2._rk
+
+                step_width(1) = 2._rk
+                step_width(2) = exec_opt(jj)
+            ELSE
+                no_stages = 1_ik
+
+                ! All entries assigned to help preventing unintended situations.
+                swept_range(1) = 180._rk
+                swept_range(2) = 180._rk
+
+                step_width(1) = exec_opt(jj)
+                step_width(2) = exec_opt(jj)
+            END IF 
 
             !------------------------------------------------------------------------------
             ! Optimization is capable of accepting dig /= 0._rk. Tensors can be optimized
@@ -613,11 +592,20 @@ ELSE
             !------------------------------------------------------------------------------
             dig = tin%pos 
 
-            DO kk = 1_ik, 1_ik
-                IF(out_amount == "DEBUG") THEN
-                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " tin%dmn: ", tin%dmn
-                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization step: ", kk
-                    WRITE(std_out, FMT_DBG_AI0AxI0) "Rank ", my_rank, " Optimization case: ", jj
+            DO kk = 1_ik, no_stages
+                IF((out_amount=="DEBUG") .AND. (my_rank==1))THEN
+                    WRITE(std_out, FMT_DBG_AxI0) "tin%dmn: ", tin%dmn
+                    WRITE(std_out, FMT_DBG)      "Optimization case: "//TRIM(suf_files(jj))
+                    WRITE(std_out, FMT_DBG_AxI0) "Optimization stage: ", kk
+                    WRITE(std_out, FMT_TXT_SEP)
+                    FLUSH(std_out)
+
+                    WRITE(std_out, FMT_DBG_AxI0) "tin%dmn: ", tin%dmn
+                    WRITE(std_out, FMT_DBG_AxF0) "tin%density: ", tin%density
+                    WRITE(std_out, FMT_DBG_AxF0) "tin%doa_zener: ", tin%doa_zener
+                    WRITE(std_out, FMT_DBG_AxF0) "tin%doa_gebert: ", tin%doa_gebert
+                    WRITE(std_out, FMT_DBG_AxF0) "tin%pos: ", tin%pos
+                    WRITE(std_out, FMT_DBG_AxF0) "tin%mat(1,1:3): ", tin%mat(1,1:3)
                     WRITE(std_out, FMT_TXT_SEP)
                     FLUSH(std_out)
                 END IF
@@ -634,25 +622,11 @@ ELSE
                 
                 !------------------------------------------------------------------------------
                 ! Optimize tensors
+                ! Implementation should ensure positive deltas in exec_opt to step along 
+                ! the range with. Otherwise, small ranges and moving backwards can cause
+                ! unintended results/behavior.
                 !------------------------------------------------------------------------------
-                SELECT CASE(jj)
-                    CASE(1)
-                        CALL opt_stiff('monotropic'  , steps(kk,:), intervall(kk,:))
-                        temp_suf = ".mono"
-                        tout%crit = "mono"
-                    CASE(2)
-                        CALL opt_stiff('orthotropic' , steps(kk,:), intervall(kk,:))
-                        temp_suf = ".orth"
-                        tout%crit = "orth"
-                    CASE(3)
-                        CALL opt_stiff('anisotropic1', steps(kk,:), intervall(kk,:))
-                        temp_suf = ".an1"
-                        tout%crit = "an1"
-                    CASE(4)
-                        CALL opt_stiff('anisotropic2', steps(kk,:), intervall(kk,:))
-                        temp_suf = ".an2"
-                        tout%crit = "an2"
-                    END SELECT        
+                CALL opt_stiff(suf_files(jj), swept_range(kk), step_width(kk))
 
                 !------------------------------------------------------------------------------
                 ! Tilts until S11 > S22 > S33 
@@ -660,6 +634,7 @@ ELSE
                 CALL tilt_tensor(tout%mat)
                 CALL check_sym(tout%mat, sym)
 
+                tout%crit = suf_files(jj)
                 tout%dmn = tin%dmn
                 tout%density = tin%density
                 tout%doa_zener = doa_zener(tout%mat)
@@ -673,7 +648,7 @@ ELSE
                 IF(print_criteria) THEN 
                     WRITE(stg, '(I0)') kk
 
-                    crit_file = TRIM(out%p_n_bsnm)//".stage-"//stg//"."//TRIM(dmn_no)//TRIM(temp_suf)//vtk_suf
+                    crit_file = TRIM(out%p_n_bsnm)//".stage-"//stg//"."//TRIM(dmn_no)//"."//TRIM(suf_files(jj))//vtk_suf
 
                     INQUIRE(FILE=TRIM(crit_file), EXIST=fex)
 
@@ -683,7 +658,7 @@ ELSE
 
                         CALL EXECUTE_COMMAND_LINE("rm -f "//TRIM(crit_file), CMDSTAT=iostat)
 
-1                        CALL print_err_stop(std_out, &
+                        CALL print_err_stop(std_out, &
                             "Removing the file "//TRIM(crit_file)//" failed.", iostat)
                     END IF
 
@@ -715,21 +690,6 @@ END IF ! Worker processes since "ELSE"
 IF(my_rank == 0) THEN
 
     !------------------------------------------------------------------------------
-    ! Print last information
-    !------------------------------------------------------------------------------
-    IF(out_amount=="DEBUG") THEN
-        WRITE(std_out, FMT_TXT_xAI0) "Processors:", size_mpi  
-        WRITE(std_out, FMT_TXT_SEP)  
-        WRITE(std_out, FMT_TXT)      "Optimization parameters:"
-        WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 1:", steps(1,:)  
-        WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 1:", intervall(1,:)  
-        WRITE(std_out, FMT_TXT)      ""
-        WRITE(std_out, FMT_TXT_AxI0) "Steps of stage 2:", steps(2,:)  
-        WRITE(std_out, FMT_TXT_AxF0) "Intervall of stage 2:", intervall(2,:)  
-        WRITE(std_out, FMT_TXT_SEP)  
-    END IF
-    
-    !------------------------------------------------------------------------------
     ! Wait for all processes
     !------------------------------------------------------------------------------
     CALL MPI_WAITALL(size_mpi-1_mik, req_list, statuses_mpi, ierr)
@@ -746,19 +706,12 @@ IF(my_rank == 0) THEN
     crs_counter = 0_mik
     
     DO jj = 1_ik, 4_ik
-        IF(.NOT. execute_optimization(jj)) CYCLE
+        IF(exec_opt(jj) <= exec_thres) CYCLE
 
         crs_counter = crs_counter + 1_mik
     
-        SELECT CASE(jj)
-            CASE(1); fhwcrit = fh_mono; suffix = suf_mono
-            CASE(2); fhwcrit = fh_orth; suffix = suf_orth
-            CASE(3); fhwcrit = fh_ani1; suffix = suf_ani1
-            CASE(4); fhwcrit = fh_ani2; suffix = suf_ani2
-        END SELECT    
-
-        CALL write_tensor_2nd_rank_R66(fhwcrit, covo_amnt_lines, tglbl_res(crs_counter, :))                    
-        CALL meta_stop_ascii(fhwcrit, suffix)
+        CALL write_tensor_2nd_rank_R66(fh_files(jj), covo_amnt_lines, tglbl_res(crs_counter, :))                    
+        CALL meta_stop_ascii(fh_files(jj), "."//TRIM(suf_files(jj)))
 
     END DO
 
