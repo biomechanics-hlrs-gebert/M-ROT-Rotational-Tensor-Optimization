@@ -110,7 +110,10 @@ USE auxiliaries_of_tensor_optimizer
 
 IMPLICIT NONE
 
-! Parameter
+!------------------------------------------------------------------------------
+! Parameter - They *MUST* fit to each other!
+!------------------------------------------------------------------------------
+CHARACTER(LEN=5), PARAMETER :: lower_thres_percentage_char = "<3% E"
 REAL(rk), PARAMETER :: lower_thres_percentage = 0.03
 REAL(rk), PARAMETER :: exec_thres = 0.0001
 
@@ -132,7 +135,7 @@ REAL(rk) :: start, end, sym, exec_opt(4), swept_range(2), &
     step_width(2), res_mono, res_orth, res_ani1, res_ani2
 
 INTEGER(ik) :: fh_covo, &
-    exp_dmn_crit, covo_amnt_lines, zero_matrix_counter = 0, &
+    exp_dmn_crit, covo_no_lines, zero_matrix_counter = 0, &
     ii, jj, kk, mm, invalid_entries, iostat, steps(2,3), no_stages, fh_files(4)
 
 LOGICAL :: print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
@@ -143,8 +146,8 @@ INTEGER(mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
 INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
 INTEGER(mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(mik), DIMENSION(8) :: blocklen, dtype 
-INTEGER(MPI_ADDRESS_KIND) :: disp(8), base
+INTEGER(mik), DIMENSION(14) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(14), base
 
 LOGICAL :: abrt = .FALSE.
 
@@ -168,32 +171,46 @@ ALLOCATE(statInt(size_mpi))
 ! Redirect std_out into a file in case std_out is not useful by environment.
 ! Place these lines before handle_lock_file :-)
 !------------------------------------------------------------------------------
-CALL MPI_GET_ADDRESS(dummy%crit, disp(1), ierr) 
-CALL MPI_GET_ADDRESS(dummy%dmn, disp(2), ierr) 
-CALL MPI_GET_ADDRESS(dummy%density, disp(3), ierr) 
-CALL MPI_GET_ADDRESS(dummy%doa_zener, disp(4), ierr) 
-CALL MPI_GET_ADDRESS(dummy%doa_gebert, disp(5), ierr) 
-CALL MPI_GET_ADDRESS(dummy%sym, disp(6), ierr) 
-CALL MPI_GET_ADDRESS(dummy%pos, disp(7), ierr) 
-CALL MPI_GET_ADDRESS(dummy%mat, disp(8), ierr) 
+CALL MPI_GET_ADDRESS(dummy%dmn              , disp( 1), ierr)  ! Number of the control volume
+CALL MPI_GET_ADDRESS(dummy%dmn_size         , disp( 2), ierr)  ! Size of the control volume
+CALL MPI_GET_ADDRESS(dummy%section(3)       , disp( 3), ierr)  ! Position within the CT image
+CALL MPI_GET_ADDRESS(dummy%phy_dmn_bnds(3,2), disp( 4), ierr)  ! Physical domain boundaries (x,y,z - lo,hi)
+CALL MPI_GET_ADDRESS(dummy%opt_crit         , disp( 5), ierr)  ! Optimization information (e.g. criteria)
+CALL MPI_GET_ADDRESS(dummy%opt_res          , disp( 6), ierr)  ! Resolution the covo was optimized with
+CALL MPI_GET_ADDRESS(dummy%pos(3)           , disp( 7), ierr)  ! Position (deg) of alpha, eta, phi
+CALL MPI_GET_ADDRESS(dummy%sym              , disp( 8), ierr)  ! Symmetry deviation (quotient)
+CALL MPI_GET_ADDRESS(dummy%DA               , disp( 9), ierr)  ! Degree of anisotropy - Bone gold standard
+CALL MPI_GET_ADDRESS(dummy%bvtv             , disp(10), ierr)  ! Bone volume/total volume
+CALL MPI_GET_ADDRESS(dummy%gray_density     , disp(11), ierr)  ! Density based on grayscale values.
+CALL MPI_GET_ADDRESS(dummy%doa_zener        , disp(12), ierr)  ! Zener degree of anisotropy
+CALL MPI_GET_ADDRESS(dummy%doa_gebert       , disp(13), ierr)  ! Gebert degree of anisotropy (modified Zener)
+CALL MPI_GET_ADDRESS(dummy%mat(6,6)         , disp(14), ierr)  ! An actual stiffness tensor
 
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1) = scl
-blocklen(2:6) = 1
-blocklen(7) = 3 
-blocklen(8) = 36 
+blocklen(1:2)  = 1  
+blocklen(3)    = 3  
+blocklen(4)    = 6  
+blocklen(5)    = scl
+blocklen(6)    = 1  
+blocklen(7)    = 3  
+blocklen(8:13) = 1  
+blocklen(14)   = 36 
 
-dtype(1) = MPI_CHARACTER
-dtype(2) = MPI_INTEGER8 
-dtype(3:8) = MPI_DOUBLE_PRECISION
+dtype(1) = MPI_INTEGER8 
+dtype(2) = MPI_DOUBLE_PRECISION
+dtype(3) = MPI_INTEGER8 
+dtype(4) = MPI_DOUBLE_PRECISION
+dtype(5) = MPI_CHARACTER
+dtype(6:14) = MPI_DOUBLE_PRECISION 
 
-CALL MPI_TYPE_CREATE_STRUCT(8_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(14_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be commited.")
+
 
 !------------------------------------------------------------------------------
 ! Initialize program itself
@@ -280,7 +297,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     fh_covo = give_new_unit()
     suf_covo = ".covo" ! control volume (in situ orientation)
-    CALL meta_existing_ascii(fh_covo, suf_covo, covo_amnt_lines)
+    CALL meta_existing_ascii(fh_covo, suf_covo, covo_no_lines)
 
     !------------------------------------------------------------------------------
     ! Package user request on optimization
@@ -313,7 +330,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     IF((exp_dmn_crit == -10_ik) .OR. (exp_dmn_crit >= 0_ik))  crit_exp_req = .TRUE.
 
-    IF((exp_dmn_crit == -10_ik) .AND. (covo_amnt_lines * crs > 100_ik)) THEN
+    IF((exp_dmn_crit == -10_ik) .AND. (covo_no_lines * crs > 100_ik)) THEN
         mssg = "Are you sure to export the criteria spaces of more than 100 &
             &optimizations (dmns*criterias) to the file system via *.vtk files?! &
             &If yes, change the source and recompile :-)"
@@ -322,7 +339,7 @@ IF(my_rank == 0) THEN
 
     IF(out_amount=="DEBUG") THEN
         WRITE(std_out, FMT_DBG_xAI0) "Processors:", size_mpi  
-        WRITE(std_out, FMT_DBG_xAI0) "Number of domains:", covo_amnt_lines-1_ik
+        WRITE(std_out, FMT_DBG_xAI0) "Number of domains:", covo_no_lines-1_ik
         WRITE(std_out, FMT_TXT_SEP)
         FLUSH(std_out)
     END IF
@@ -331,12 +348,16 @@ IF(my_rank == 0) THEN
     ! Parse the global input data
     ! Allocate amnt_lines -1_ik due to header
     !------------------------------------------------------------------------------
-    ALLOCATE(tglbl_in(covo_amnt_lines-1_ik))
+    ALLOCATE(tglbl_in(covo_no_lines-1_ik))
 
     CALL parse_tensor_2nd_rank_R66(fh_covo, in%p_n_bsnm//TRIM(suf_covo), &
-        covo_amnt_lines, tglbl_in, invalid_entries)
+        covo_no_lines, tglbl_in, invalid_entries)
 
-    IF(covo_amnt_lines == invalid_entries+1_ik) THEN
+    IF (invalid_entries > 0) THEN
+        WRITE(std_out, FMT_WRN_AI0AxI0) "", invalid_entries, " invalid domains."
+    END IF
+
+    IF(covo_no_lines == invalid_entries+1_ik) THEN
         
         statInt = stop_workers(size_mpi)
         
@@ -349,7 +370,7 @@ IF(my_rank == 0) THEN
     ! Allocate global results array. Need to loop over exec_opt 
     ! to properly assign the tglbl_res(entries, :)
     !------------------------------------------------------------------------------
-    ALLOCATE(tglbl_res(crs, covo_amnt_lines-1_ik))
+    ALLOCATE(tglbl_res(crs, covo_no_lines-1_ik))
 
 END IF ! (my_rank == 0)
 
@@ -392,22 +413,13 @@ IF (my_rank==0) THEN
         FLUSH(std_out)
     END IF
 
-    mii = 1_mik
+    !------------------------------------------------------------------------------
+    ! mii counter located at the beginning of the loop to enable cycling 
+    ! zero tensors.
+    !------------------------------------------------------------------------------
+    mii = 0_mik
     feed_ranks = 1_mik 
         
-    IF(out_amount=="DEBUG") THEN
-        ! DO mii = 1, 9
-        WRITE(std_out, FMT_DBG_AI0AxI0) "tglbl_in(", mii, ")%dmn: ", tglbl_in(mii)%dmn
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%density: ", tglbl_in(mii)%density
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%doa_zener: ", tglbl_in(mii)%doa_zener
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%doa_gebert: ", tglbl_in(mii)%doa_gebert
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%pos: ", tglbl_in(mii)%pos
-        WRITE(std_out, FMT_DBG_AI0AxF0) "tglbl_in(", mii, ")%mat(1,1:3): ", tglbl_in(mii)%mat(1,1:3)
-        WRITE(std_out, FMT_TXT_SEP)
-        FLUSH(std_out)
-        ! end do
-    END IF
-
     !------------------------------------------------------------------------------
     ! Supply all worker masters with their first tensor
     ! Master does not compute tensors
@@ -417,7 +429,8 @@ IF (my_rank==0) THEN
     ! Each processor -> 1 domain. Therefore, nn (domain) = mii (process)
     ! @Struct process -> 1 nn can have multiple processes
     !------------------------------------------------------------------------------
-    DO WHILE (mii <= covo_amnt_lines-1_ik)
+    DO WHILE (mii <= covo_no_lines-1_ik)
+        mii = mii + 1_mik
 
         !------------------------------------------------------------------------------
         ! Track whether the domain requested is contained in the input data.
@@ -426,24 +439,34 @@ IF (my_rank==0) THEN
             IF(tglbl_in(mii)%dmn == exp_dmn_crit) dmn_found = .TRUE.
         END IF
 
+        DO mm=1, crs
+            tglbl_res(mm, mii)%dmn            = tglbl_in(mii)%dmn              
+            tglbl_res(mm, mii)%dmn_size       = tglbl_in(mii)%dmn_size         
+            tglbl_res(mm, mii)%section        = tglbl_in(mii)%section       
+            tglbl_res(mm, mii)%phy_dmn_bnds   = tglbl_in(mii)%phy_dmn_bnds
+            tglbl_res(mm, mii)%opt_res        = tglbl_in(mii)%opt_res          
+            tglbl_res(mm, mii)%pos            = tglbl_in(mii)%pos           
+            tglbl_res(mm, mii)%sym            = tglbl_in(mii)%sym              
+            tglbl_res(mm, mii)%DA             = tglbl_in(mii)%DA               
+            tglbl_res(mm, mii)%bvtv           = tglbl_in(mii)%bvtv             
+            tglbl_res(mm, mii)%gray_density   = tglbl_in(mii)%gray_density     
+            tglbl_res(mm, mii)%doa_zener      = tglbl_in(mii)%doa_zener        
+            tglbl_res(mm, mii)%doa_gebert     = tglbl_in(mii)%doa_gebert       
+            tglbl_res(mm, mii)%mat            = tglbl_in(mii)%mat         
+        END DO
+
         !------------------------------------------------------------------------------
-        ! Check whether it is a zero tensor:
+        ! Check whether it is a "zero tensor":
+        ! Done in a separate loop to clarify the use of CYCLE. Can be solved with a 
+        ! goto statement, but this would be less clear...
         !------------------------------------------------------------------------------
-        IF(SUM(tglbl_in(mii)%mat) <= lower_thres_percentage * bone%E) THEN
-            DO mm=1, crs
-                tglbl_res(mm, mii)%density = 0._rk
-                tglbl_res(mm, mii)%crit = "<3% E"
-                tglbl_res(mm, mii)%doa_zener = 0._rk
-                tglbl_res(mm, mii)%doa_gebert = 0._rk
-                tglbl_res(mm, mii)%pos = 0._rk
-                tglbl_res(mm, mii)%mat = 0._rk
-                tglbl_res(mm, mii)%dmn = tglbl_in(mii)%dmn
-            END DO
+        IF(MAXVAL(tglbl_in(mii)%mat) <= lower_thres_percentage * bone%E) THEN
+            tglbl_res(:, mii)%opt_crit = "<3% E"          
+
             zero_matrix_counter = zero_matrix_counter + 1_ik
- 
-            mii = mii + 1_mik
-    
             CYCLE
+        ELSE ! Is not a zero tensor - "standard"
+            tglbl_res(:, mii)%opt_crit = "std."
         END IF
 
         !------------------------------------------------------------------------------
@@ -455,7 +478,7 @@ IF (my_rank==0) THEN
 
             CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
-            WRITE(std_out, FMT_TXT_xAI0) "Processed domains: ", mii, " of ", covo_amnt_lines-1_ik
+            WRITE(std_out, FMT_TXT_xAI0) "Processed domains: ", mii, " of ", covo_no_lines-1_ik
             WRITE(std_out, FMT_TXT_xAI0) "Most current input to compute:", tglbl_in(mii)%dmn
             WRITE(std_out, FMT_TXT_xAI0) "Total 0-matrices: ", zero_matrix_counter
             WRITE(std_out, FMT_TXT) ""
@@ -507,8 +530,6 @@ IF (my_rank==0) THEN
         CALL print_err_stop(std_out, "MPI_IRECV of activity(mii) failed.", INT(ierr, ik))
 
         feed_ranks = feed_ranks + 1_ik  
-
-        mii = mii + 1_mik
     END DO
     ! Still my_rank == 0
 
@@ -593,22 +614,6 @@ ELSE
             dig = tin%pos 
 
             DO kk = 1_ik, no_stages
-                IF((out_amount=="DEBUG") .AND. (my_rank==1))THEN
-                    WRITE(std_out, FMT_DBG_AxI0) "tin%dmn: ", tin%dmn
-                    WRITE(std_out, FMT_DBG)      "Optimization case: "//TRIM(suf_files(jj))
-                    WRITE(std_out, FMT_DBG_AxI0) "Optimization stage: ", kk
-                    WRITE(std_out, FMT_TXT_SEP)
-                    FLUSH(std_out)
-
-                    WRITE(std_out, FMT_DBG_AxI0) "tin%dmn: ", tin%dmn
-                    WRITE(std_out, FMT_DBG_AxF0) "tin%density: ", tin%density
-                    WRITE(std_out, FMT_DBG_AxF0) "tin%doa_zener: ", tin%doa_zener
-                    WRITE(std_out, FMT_DBG_AxF0) "tin%doa_gebert: ", tin%doa_gebert
-                    WRITE(std_out, FMT_DBG_AxF0) "tin%pos: ", tin%pos
-                    WRITE(std_out, FMT_DBG_AxF0) "tin%mat(1,1:3): ", tin%mat(1,1:3)
-                    WRITE(std_out, FMT_TXT_SEP)
-                    FLUSH(std_out)
-                END IF
 
                 !------------------------------------------------------------------------------
                 ! Reset for stage 2
@@ -634,12 +639,6 @@ ELSE
                 CALL tilt_tensor(tout%mat)
                 CALL check_sym(tout%mat, sym)
 
-                tout%crit = suf_files(jj)
-                tout%dmn = tin%dmn
-                tout%density = tin%density
-                tout%doa_zener = doa_zener(tout%mat)
-                tout%doa_gebert = doa_gebert(tout%mat)
-                tout%density = gebert_density_voigt(tout%mat, bone%E, bone%nu)
                 tout%sym = sym
 
                 !------------------------------------------------------------------------------
@@ -710,7 +709,7 @@ IF(my_rank == 0) THEN
 
         crs_counter = crs_counter + 1_mik
     
-        CALL write_tensor_2nd_rank_R66(fh_files(jj), covo_amnt_lines, tglbl_res(crs_counter, :))                    
+        CALL write_tensor_2nd_rank_R66(fh_files(jj), covo_no_lines, tglbl_res(crs_counter, :))                    
         CALL meta_stop_ascii(fh_files(jj), "."//TRIM(suf_files(jj)))
 
     END DO
