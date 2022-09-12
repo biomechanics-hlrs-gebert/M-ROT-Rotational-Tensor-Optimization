@@ -142,7 +142,6 @@ LOGICAL :: print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
 
 INTEGER(mik) :: ierr, my_rank, size_mpi, mii, active, feed_ranks, crs, crs_counter
 INTEGER(mik), DIMENSION(MPI_STATUS_SIZE) :: stmpi
-INTEGER(mik), DIMENSION(:,:), ALLOCATABLE :: statuses_mpi
 INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
 INTEGER(mik) :: MPI_tensor_2nd_rank_R66
@@ -171,46 +170,48 @@ ALLOCATE(statInt(size_mpi))
 ! Redirect std_out into a file in case std_out is not useful by environment.
 ! Place these lines before handle_lock_file :-)
 !------------------------------------------------------------------------------
-CALL MPI_GET_ADDRESS(dummy%dmn              , disp( 1), ierr)  ! Number of the control volume
-CALL MPI_GET_ADDRESS(dummy%dmn_size         , disp( 2), ierr)  ! Size of the control volume
-CALL MPI_GET_ADDRESS(dummy%section(3)       , disp( 3), ierr)  ! Position within the CT image
-CALL MPI_GET_ADDRESS(dummy%phy_dmn_bnds(3,2), disp( 4), ierr)  ! Physical domain boundaries (x,y,z - lo,hi)
-CALL MPI_GET_ADDRESS(dummy%opt_crit         , disp( 5), ierr)  ! Optimization information (e.g. criteria)
-CALL MPI_GET_ADDRESS(dummy%opt_res          , disp( 6), ierr)  ! Resolution the covo was optimized with
-CALL MPI_GET_ADDRESS(dummy%pos(3)           , disp( 7), ierr)  ! Position (deg) of alpha, eta, phi
-CALL MPI_GET_ADDRESS(dummy%sym              , disp( 8), ierr)  ! Symmetry deviation (quotient)
-CALL MPI_GET_ADDRESS(dummy%DA               , disp( 9), ierr)  ! Degree of anisotropy - Bone gold standard
-CALL MPI_GET_ADDRESS(dummy%bvtv             , disp(10), ierr)  ! Bone volume/total volume
-CALL MPI_GET_ADDRESS(dummy%gray_density     , disp(11), ierr)  ! Density based on grayscale values.
-CALL MPI_GET_ADDRESS(dummy%doa_zener        , disp(12), ierr)  ! Zener degree of anisotropy
-CALL MPI_GET_ADDRESS(dummy%doa_gebert       , disp(13), ierr)  ! Gebert degree of anisotropy (modified Zener)
-CALL MPI_GET_ADDRESS(dummy%mat(6,6)         , disp(14), ierr)  ! An actual stiffness tensor
+CALL MPI_GET_ADDRESS(dummy%section     , disp( 1), ierr)  ! Position within the CT image
+CALL MPI_GET_ADDRESS(dummy%dmn         , disp( 2), ierr)  ! Number of the control volume
+CALL MPI_GET_ADDRESS(dummy%dmn_size    , disp( 3), ierr)  ! Size of the control volume
+CALL MPI_GET_ADDRESS(dummy%phy_dmn_bnds, disp( 4), ierr)  ! Physical domain boundaries (x,y,z - lo,hi)
+CALL MPI_GET_ADDRESS(dummy%opt_res     , disp( 5), ierr)  ! Resolution the covo was optimized with
+CALL MPI_GET_ADDRESS(dummy%pos         , disp( 6), ierr)  ! Position (deg) of alpha, eta, phi
+CALL MPI_GET_ADDRESS(dummy%sym         , disp( 7), ierr)  ! Symmetry deviation (quotient)
+CALL MPI_GET_ADDRESS(dummy%DA          , disp( 8), ierr)  ! Degree of anisotropy - Bone gold standard
+CALL MPI_GET_ADDRESS(dummy%bvtv        , disp( 9), ierr)  ! Bone volume/total volume
+CALL MPI_GET_ADDRESS(dummy%gray_density, disp(10), ierr)  ! Density based on grayscale values.
+CALL MPI_GET_ADDRESS(dummy%doa_zener   , disp(11), ierr)  ! Zener degree of anisotropy
+CALL MPI_GET_ADDRESS(dummy%doa_gebert  , disp(12), ierr)  ! Gebert degree of anisotropy (modified Zener)
+CALL MPI_GET_ADDRESS(dummy%mat         , disp(13), ierr)  ! An actual stiffness tensor
+CALL MPI_GET_ADDRESS(dummy%opt_crit    , disp(14), ierr)  ! Optimization information (e.g. criteria)
 
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1:2)  = 1  
-blocklen(3)    = 3  
-blocklen(4)    = 6  
-blocklen(5)    = scl
-blocklen(6)    = 1  
-blocklen(7)    = 3  
-blocklen(8:13) = 1  
-blocklen(14)   = 36 
+blocklen(1)  = 1_mik
+blocklen(2)  = 1_mik
+blocklen(3)  = 1_mik
+blocklen(4)  = 6_mik
+blocklen(5)  = 1_mik
+blocklen(6)  = 3_mik
+blocklen(7)  = 1_mik
+blocklen(8)  = 1_mik
+blocklen(9)  = 1_mik
+blocklen(10) = 1_mik
+blocklen(11) = 1_mik
+blocklen(12) = 1_mik
+blocklen(13) = 36_mik
+blocklen(14) = scl 
 
-dtype(1) = MPI_INTEGER8 
-dtype(2) = MPI_DOUBLE_PRECISION
-dtype(3) = MPI_INTEGER8 
-dtype(4) = MPI_DOUBLE_PRECISION
-dtype(5) = MPI_CHARACTER
-dtype(6:14) = MPI_DOUBLE_PRECISION 
+dtype(1:2)  = MPI_INTEGER8 
+dtype(3:13) = MPI_DOUBLE_PRECISION
+dtype(14)   = MPI_CHARACTER 
 
 CALL MPI_TYPE_CREATE_STRUCT(14_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be commited.")
-
 
 !------------------------------------------------------------------------------
 ! Initialize program itself
@@ -276,11 +277,6 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     CALL meta_handle_lock_file(restart, restart_cmd_arg)
 
-    !------------------------------------------------------------------------------
-    ! Start monitoring of MPI
-    !------------------------------------------------------------------------------
-    CALL meta_start_ascii(fh_mon, mon_suf)
-
     CALL DATE_AND_TIME(date, time)
 
     IF(out_amount=="DEBUG") THEN
@@ -302,15 +298,22 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Package user request on optimization
     !------------------------------------------------------------------------------
-    exec_opt(1) = res_mono; fh_files(1) = give_new_unit(); suf_files(1) = "mono" 
-    exec_opt(2) = res_orth; fh_files(2) = give_new_unit(); suf_files(2) = "orth" 
-    exec_opt(3) = res_ani1; fh_files(3) = give_new_unit(); suf_files(3) = "an1" 
-    exec_opt(4) = res_ani2; fh_files(4) = give_new_unit(); suf_files(4) = "an2" 
+    exec_opt(1) = res_mono; suf_files(1) = "mono" 
+    exec_opt(2) = res_orth; suf_files(2) = "orth" 
+    exec_opt(3) = res_ani1; suf_files(3) = "an1" 
+    exec_opt(4) = res_ani2; suf_files(4) = "an2" 
 
     crs = 0_mik
     DO ii=1, 4
+
+        fh_files(ii) = give_new_unit()
+        
+        !------------------------------------------------------------------------------
+        ! Exec thresh to check whether the angle ~= 0.
+        !------------------------------------------------------------------------------
         IF(exec_opt(ii) > exec_thres) THEN
             crs=crs+1_mik
+            
             CALL meta_start_ascii(fh_files(ii), "."//TRIM(suf_files(ii))) 
         END IF
     END DO
@@ -384,9 +387,7 @@ CALL MPI_BCAST(out%path    , INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD
 CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(suf_files   , INT(scl*4_ik, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-
 CALL MPI_BCAST(exec_opt, 4_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
-
 CALL MPI_BCAST(exp_dmn_crit, 1_mik, MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
 
@@ -394,10 +395,7 @@ CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
 ! All Ranks -- Init MPI request and status lists
 !------------------------------------------------------------------------------
 ALLOCATE(req_list(size_mpi-1_mik))
-req_list=1_mik
-
-ALLOCATE(statuses_mpi(MPI_STATUS_SIZE, size_mpi-1_mik))
-statuses_mpi=0_mik
+req_list=0_mik
 
 !------------------------------------------------------------------------------
 ! Rank 0 -- Process master - Start working process
@@ -413,11 +411,7 @@ IF (my_rank==0) THEN
         FLUSH(std_out)
     END IF
 
-    !------------------------------------------------------------------------------
-    ! mii counter located at the beginning of the loop to enable cycling 
-    ! zero tensors.
-    !------------------------------------------------------------------------------
-    mii = 0_mik
+    mii = 1_mik
     feed_ranks = 1_mik 
         
     !------------------------------------------------------------------------------
@@ -430,7 +424,6 @@ IF (my_rank==0) THEN
     ! @Struct process -> 1 nn can have multiple processes
     !------------------------------------------------------------------------------
     DO WHILE (mii <= covo_no_lines-1_ik)
-        mii = mii + 1_mik
 
         !------------------------------------------------------------------------------
         ! Track whether the domain requested is contained in the input data.
@@ -439,31 +432,25 @@ IF (my_rank==0) THEN
             IF(tglbl_in(mii)%dmn == exp_dmn_crit) dmn_found = .TRUE.
         END IF
 
-        DO mm=1, crs
-            tglbl_res(mm, mii)%dmn            = tglbl_in(mii)%dmn              
-            tglbl_res(mm, mii)%dmn_size       = tglbl_in(mii)%dmn_size         
-            tglbl_res(mm, mii)%section        = tglbl_in(mii)%section       
-            tglbl_res(mm, mii)%phy_dmn_bnds   = tglbl_in(mii)%phy_dmn_bnds
-            tglbl_res(mm, mii)%opt_res        = tglbl_in(mii)%opt_res          
-            tglbl_res(mm, mii)%pos            = tglbl_in(mii)%pos           
-            tglbl_res(mm, mii)%sym            = tglbl_in(mii)%sym              
-            tglbl_res(mm, mii)%DA             = tglbl_in(mii)%DA               
-            tglbl_res(mm, mii)%bvtv           = tglbl_in(mii)%bvtv             
-            tglbl_res(mm, mii)%gray_density   = tglbl_in(mii)%gray_density     
-            tglbl_res(mm, mii)%doa_zener      = tglbl_in(mii)%doa_zener        
-            tglbl_res(mm, mii)%doa_gebert     = tglbl_in(mii)%doa_gebert       
-            tglbl_res(mm, mii)%mat            = tglbl_in(mii)%mat         
-        END DO
+        IF(out_amount=="DEBUG") THEN
+
+        END IF 
 
         !------------------------------------------------------------------------------
-        ! Check whether it is a "zero tensor":
-        ! Done in a separate loop to clarify the use of CYCLE. Can be solved with a 
-        ! goto statement, but this would be less clear...
+        ! Check whether it is a zero tensor:
         !------------------------------------------------------------------------------
         IF(MAXVAL(tglbl_in(mii)%mat) <= lower_thres_percentage * bone%E) THEN
-            tglbl_res(:, mii)%opt_crit = "<3% E"          
+            DO mm=1, crs
+                tglbl_res(mm, mii) = tglbl_in(mii)
 
+                tglbl_res(mm, mii)%opt_crit = lower_thres_percentage_char
+                tglbl_res(mm, mii)%mat  = 0._rk
+
+            END DO
             zero_matrix_counter = zero_matrix_counter + 1_ik
+ 
+            mii = mii + 1_mik
+    
             CYCLE
         ELSE ! Is not a zero tensor - "standard"
             tglbl_res(:, mii)%opt_crit = "std."
@@ -485,7 +472,23 @@ IF (my_rank==0) THEN
 
             WRITE(dmn_no, '(I0)') tglbl_in(mii)%dmn ! Write the domain number to string (!)
 
+            write(std_out,FMT_TXT_AxI0) "tglbl_in(mii)%section(3)       : ", tglbl_in(mii)%section(:)       
+            write(std_out,FMT_TXT_AxI0) "tglbl_in(mii)%dmn              : ", tglbl_in(mii)%dmn              
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%dmn_size         : ", tglbl_in(mii)%dmn_size         
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%phy_dmn_bnds(3,2): ", tglbl_in(mii)%phy_dmn_bnds(:,:)
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%opt_res          : ", tglbl_in(mii)%opt_res          
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%pos(3)           : ", tglbl_in(mii)%pos(:)           
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%sym              : ", tglbl_in(mii)%sym              
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%DA               : ", tglbl_in(mii)%DA               
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%bvtv             : ", tglbl_in(mii)%bvtv             
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%gray_density     : ", tglbl_in(mii)%gray_density     
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%doa_zener        : ", tglbl_in(mii)%doa_zener        
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%doa_gebert       : ", tglbl_in(mii)%doa_gebert     
+            write(std_out,FMT_TXT_AxF0) "TRIM(tglbl_in(mii)%opt_crit)   : "//TRIM(tglbl_in(mii)%opt_crit)
+            
             CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), tglbl_in(mii)%mat, 'spl')
+
+            write(std_out,FMT_SEP)
 
             IF(out_amount /= "DEBUG") THEN
                 WRITE (std_out, FMT_TXT) "Lots of optimization steps requested."
@@ -494,7 +497,7 @@ IF (my_rank==0) THEN
         END IF
 
         !------------------------------------------------------------------------------
-        ! Amount of entities to compute. 
+        ! Number of entities to compute. 
         ! -1_ik due to header of file.
         !------------------------------------------------------------------------------
         IF (feed_ranks > (size_mpi-1_mik)) feed_ranks = 1_ik 
@@ -508,19 +511,10 @@ IF (my_rank==0) THEN
         !------------------------------------------------------------------------------
         ! Send tensor
         !------------------------------------------------------------------------------
-        CALL MPI_SEND(tglbl_in(mii), 1_mik, MPI_tensor_2nd_rank_R66, feed_ranks, &
-            feed_ranks, MPI_COMM_WORLD, ierr)
+        CALL MPI_SEND(tglbl_in(mii), 1_mik, MPI_tensor_2nd_rank_R66, &
+            feed_ranks, feed_ranks, MPI_COMM_WORLD, ierr)
         CALL print_err_stop(std_out, "MPI_SEND of tin failed.", INT(ierr, ik))            
          
-        !------------------------------------------------------------------------------
-        ! Log to monitor file (first worker thread)
-        !------------------------------------------------------------------------------
-        IF(out_amount=="DEBUG") THEN
-            WRITE(fh_mon, DBG//"3(A,1x,"//FMT_INT//",1x),A,3(I5,1x),A,3(F8.4,1x))") &
-                "MPI rank: ", feed_ranks, &
-                " Domain number: ", tglbl_in(mii)%dmn
-            FLUSH(fh_mon)
-        END IF
         !------------------------------------------------------------------------------
         ! Place a receive for the tensor. 
         ! Tensors are not sortded automatically.
@@ -530,6 +524,8 @@ IF (my_rank==0) THEN
         CALL print_err_stop(std_out, "MPI_IRECV of activity(mii) failed.", INT(ierr, ik))
 
         feed_ranks = feed_ranks + 1_ik  
+
+        mii = mii + 1_mik
     END DO
     ! Still my_rank == 0
 
@@ -544,20 +540,22 @@ ELSE
     ALLOCATE(tlcl_res(crs))
 
     DO
+
         !------------------------------------------------------------------------------
-        ! Stop (gracefully) if workers receive an active = -1 information.
+        ! Stop if all domains are computed
+        ! Stop slaves in case of an error
         !------------------------------------------------------------------------------
         CALL MPI_RECV(active, 1_mik, MPI_INTEGER, 0_mik, my_rank, MPI_COMM_WORLD, stmpi, ierr)
         CALL print_err_stop(std_out, "MPI_RECV on active failed.", INT(ierr, ik))
 
         IF(active == -1) GOTO 1001
-
+        
         !------------------------------------------------------------------------------
         ! Receive tensor (derived type of tensor_2nd_rank_R66)
         !------------------------------------------------------------------------------
         CALL MPI_RECV(tin, 1_mik, MPI_tensor_2nd_rank_R66, 0_mik, my_rank, MPI_COMM_WORLD, stmpi, ierr)
         CALL print_err_stop(std_out, "MPI_RECV on tin failed.", INT(ierr, ik))
-
+   
         !------------------------------------------------------------------------------
         ! Check whether to write the requested domain(s) to *.vtk. At this point,
         ! the program does not care how many of all domains are for export.
@@ -576,8 +574,12 @@ ELSE
         !------------------------------------------------------------------------------
         ! Loop over modes
         !------------------------------------------------------------------------------
+        mm=0_ik
         DO jj = 1_ik, 4_ik
 
+            !------------------------------------------------------------------------------
+            ! Cycle if criteria is not requested. Is as good as any other if/else.
+            !------------------------------------------------------------------------------
             IF(exec_opt(jj) < exec_thres) CYCLE
 
             !------------------------------------------------------------------------------
@@ -603,6 +605,11 @@ ELSE
                 step_width(1) = exec_opt(jj)
                 step_width(2) = exec_opt(jj)
             END IF 
+
+            !----------------------------------------------------------------------------------------------
+            ! Copy input to output tensor. Important to keep domain data etc.
+            !----------------------------------------------------------------------------------------------
+            tout = tin      
 
             !------------------------------------------------------------------------------
             ! Optimization is capable of accepting dig /= 0._rk. Tensors can be optimized
@@ -644,7 +651,7 @@ ELSE
                 !------------------------------------------------------------------------------
                 ! Print vtk files of criteria spaces
                 !------------------------------------------------------------------------------
-                IF(print_criteria) THEN 
+                IF((print_criteria) .AND. (exp_dmn_crit >= 0_ik))THEN 
                     WRITE(stg, '(I0)') kk
 
                     crit_file = TRIM(out%p_n_bsnm)//".stage-"//stg//"."//TRIM(dmn_no)//"."//TRIM(suf_files(jj))//vtk_suf
@@ -677,10 +684,12 @@ ELSE
             crs_counter = crs_counter + 1_mik
 
         END DO
+        ! write(*,*) "my rank: ", my_rank, " tin%dmn: ",tout%dmn, "END"
 
         CALL MPI_SEND(tlcl_res, INT(crs, mik), MPI_tensor_2nd_rank_R66, 0_mik, &
             INT(tout%dmn, mik), MPI_COMM_WORLD, ierr)
         CALL print_err_stop(std_out, "MPI_SEND on tlcl_res failed.", INT(ierr, ik))
+        ! write(*,*) "my rank: ", my_rank, " tin%dmn: ",tin%dmn, "SEND"
 
     END DO
 
@@ -688,12 +697,16 @@ END IF ! Worker processes since "ELSE"
 
 IF(my_rank == 0) THEN
 
+    write(*,*) "Calling them home."
+
     !------------------------------------------------------------------------------
     ! Wait for all processes
     !------------------------------------------------------------------------------
-    CALL MPI_WAITALL(size_mpi-1_mik, req_list, statuses_mpi, ierr)
+    CALL MPI_WAITALL(size_mpi-1_mik, req_list, MPI_STATUSES_IGNORE, ierr)
     CALL print_err_stop(std_out, "MPI_WAITANY on req_list for IRECV of tglbl_res failed.", &
         INT(ierr, ik))
+    
+    write(*,*) "Waiting."
 
     statInt = stop_workers(size_mpi)
 
@@ -705,6 +718,7 @@ IF(my_rank == 0) THEN
     crs_counter = 0_mik
     
     DO jj = 1_ik, 4_ik
+        
         IF(exec_opt(jj) <= exec_thres) CYCLE
 
         crs_counter = crs_counter + 1_mik
@@ -726,16 +740,12 @@ END IF ! (my_rank == 0)
 !------------------------------------------------------------------------------
 1001 Continue
 
-!------------------------------------------------------------------------------
-! Stop monitoring of rank 1
-!------------------------------------------------------------------------------
-IF((out_amount == "DEBUG") .AND. (my_rank == 1)) CALL meta_stop_ascii(fh_mon, mon_suf)
 
 IF(my_rank == 0) THEN
 
     !------------------------------------------------------------------------------
     ! Finish the program
-    !------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
     CALL meta_close()
 
     CALL CPU_TIME(end)
