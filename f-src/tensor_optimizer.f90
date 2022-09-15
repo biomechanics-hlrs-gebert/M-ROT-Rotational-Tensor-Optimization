@@ -131,22 +131,26 @@ CHARACTER(  1) :: stg='1'
 CHARACTER(  8) :: date
 CHARACTER( 10) :: time
 
-REAL(rk) :: start, end, sym, exec_opt(4), swept_range(2), &
-    step_width(2), res_mono, res_orth, res_ani1, res_ani2
+REAL(rk) :: start, end, res_mono, res_orth, res_ani1, res_ani2
+REAL(rk), DIMENSION(2) :: step_width, swept_range
+REAL(rk), DIMENSION(3) :: dmn_size, spcng
+REAL(rk), DIMENSION(4) :: exec_opt
 
-INTEGER(ik) :: fh_covo, &
+INTEGER(ik) :: fh_covo, no_stages, fh_files(4), &
     exp_dmn_crit, covo_no_lines, zero_matrix_counter = 0, &
-    ii, jj, kk, mm, invalid_entries, iostat, steps(2,3), no_stages, fh_files(4)
+    ii, jj, kk, mm, xx, invalid_entries, iostat, steps(2,3)
+INTEGER(ik), DIMENSION(3) :: dims, grid
 
 LOGICAL :: print_criteria, fex, crit_exp_req = .FALSE., dmn_found = .FALSE.
 
-INTEGER(mik) :: ierr, my_rank, size_mpi, mii, active, feed_ranks, crs, crs_counter
+INTEGER(mik) :: ierr, my_rank, size_mpi, mii, active, feed_ranks, crs, crs_counter, ios
 INTEGER(mik), DIMENSION(MPI_STATUS_SIZE) :: stmpi
 INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
 INTEGER(mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(mik), DIMENSION(14) :: blocklen, dtype 
-INTEGER(MPI_ADDRESS_KIND) :: disp(14), base
+INTEGER(mik), DIMENSION(16) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(16), base
+
 
 LOGICAL :: abrt = .FALSE.
 
@@ -182,13 +186,15 @@ CALL MPI_GET_ADDRESS(dummy%bvtv        , disp( 9), ierr)  ! Bone volume/total vo
 CALL MPI_GET_ADDRESS(dummy%gray_density, disp(10), ierr)  ! Density based on grayscale values.
 CALL MPI_GET_ADDRESS(dummy%doa_zener   , disp(11), ierr)  ! Zener degree of anisotropy
 CALL MPI_GET_ADDRESS(dummy%doa_gebert  , disp(12), ierr)  ! Gebert degree of anisotropy (modified Zener)
-CALL MPI_GET_ADDRESS(dummy%mat         , disp(13), ierr)  ! An actual stiffness tensor
-CALL MPI_GET_ADDRESS(dummy%opt_crit    , disp(14), ierr)  ! Optimization information (e.g. criteria)
+CALL MPI_GET_ADDRESS(dummy%mps         , disp(13), ierr)  ! Gebert degree of anisotropy (modified Zener)
+CALL MPI_GET_ADDRESS(dummy%spec_norm   , disp(14), ierr)  ! An actual stiffness tensor
+CALL MPI_GET_ADDRESS(dummy%mat         , disp(15), ierr)  ! An actual stiffness tensor
+CALL MPI_GET_ADDRESS(dummy%opt_crit    , disp(16), ierr)  ! Optimization information (e.g. criteria)
 
 base = disp(1) 
 disp = disp - base 
 
-blocklen(1)  = 1_mik
+blocklen(1)  = 3_mik
 blocklen(2)  = 1_mik
 blocklen(3)  = 1_mik
 blocklen(4)  = 6_mik
@@ -200,14 +206,16 @@ blocklen(9)  = 1_mik
 blocklen(10) = 1_mik
 blocklen(11) = 1_mik
 blocklen(12) = 1_mik
-blocklen(13) = 36_mik
-blocklen(14) = scl 
+blocklen(13) = 1_mik
+blocklen(14) = 1_mik
+blocklen(15) = 36_mik
+blocklen(16) = scl 
 
 dtype(1:2)  = MPI_INTEGER8 
-dtype(3:13) = MPI_DOUBLE_PRECISION
-dtype(14)   = MPI_CHARACTER 
+dtype(3:15) = MPI_DOUBLE_PRECISION
+dtype(16)   = MPI_CHARACTER 
 
-CALL MPI_TYPE_CREATE_STRUCT(14_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(16_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
@@ -266,10 +274,15 @@ IF(my_rank == 0) THEN
     CALL meta_read('RESOLUTION_ANI1', m_rry, res_ani1, stat); CALL mest(stat, abrt)
     CALL meta_read('RESOLUTION_ANI2', m_rry, res_ani2, stat); CALL mest(stat, abrt)
 
-    CALL meta_read('RESTART'        , m_rry, restart, stat); CALL mest(stat, abrt)
-    CALL meta_read('YOUNG_MODULUS'  , m_rry, bone%E , stat); CALL mest(stat, abrt)
-    CALL meta_read('POISSON_RATIO'  , m_rry, bone%nu, stat); CALL mest(stat, abrt)
     CALL meta_read('EXPORT_DMN_CRIT', m_rry, exp_dmn_crit, stat); CALL mest(stat, abrt)
+
+    CALL meta_read('RESTART'        , m_rry, restart, stat); CALL mest(stat, abrt)
+
+    CALL meta_read('YOUNG_MODULUS'  , m_rry, bone%E ,  stat); CALL mest(stat, abrt)
+    CALL meta_read('POISSON_RATIO'  , m_rry, bone%nu,  stat); CALL mest(stat, abrt)
+    CALL meta_read('SIZE_DOMAIN'    , m_rry, dmn_size, stat); CALL mest(stat, abrt)
+    CALL meta_read('DIMENSIONS'     , m_rry, dims,     stat); CALL mest(stat, abrt)
+    CALL meta_read('SPACING'        , m_rry, spcng,    stat); CALL mest(stat, abrt)
 
     !------------------------------------------------------------------------------
     ! Restart handling
@@ -391,6 +404,10 @@ CALL MPI_BCAST(exec_opt, 4_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ier
 CALL MPI_BCAST(exp_dmn_crit, 1_mik, MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
 
+CALL MPI_BCAST(dmn_size, 3_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(spcng,    3_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(dims,     3_mik, MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
+
 !------------------------------------------------------------------------------
 ! All Ranks -- Init MPI request and status lists
 !------------------------------------------------------------------------------
@@ -484,6 +501,7 @@ IF (my_rank==0) THEN
             write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%gray_density     : ", tglbl_in(mii)%gray_density     
             write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%doa_zener        : ", tglbl_in(mii)%doa_zener        
             write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%doa_gebert       : ", tglbl_in(mii)%doa_gebert     
+            write(std_out,FMT_TXT_AxF0) "tglbl_in(mii)%mps              : ", tglbl_in(mii)%mps  
             write(std_out,FMT_TXT_AxF0) "TRIM(tglbl_in(mii)%opt_crit)   : "//TRIM(tglbl_in(mii)%opt_crit)
             
             CALL write_matrix(std_out, "Domain "//TRIM(dmn_no), tglbl_in(mii)%mat, 'spl')
@@ -644,9 +662,6 @@ ELSE
                 ! Tilts until S11 > S22 > S33 
                 !------------------------------------------------------------------------------
                 CALL tilt_tensor(tout%mat)
-                CALL check_sym(tout%mat, sym)
-
-                tout%sym = sym
 
                 !------------------------------------------------------------------------------
                 ! Print vtk files of criteria spaces
@@ -673,6 +688,30 @@ ELSE
 
             END DO
 
+
+
+            !------------------------------------------------------------------------------
+            ! Compute additional parameters.
+            !------------------------------------------------------------------------------
+            grid = get_grid(dmn_size, dims, spcng)
+            tout%section = domain_no_to_section(tout%dmn, grid)
+          
+            DO xx=1, 3
+                tout%phy_dmn_bnds(xx,1) =  tout%section(xx)   *tout%dmn_size
+                tout%phy_dmn_bnds(xx,2) = (tout%section(xx)+1)*tout%dmn_size
+            END DO
+
+            tout%sym = check_sym(tout%mat)
+            tout%mps = mps(tout%mat)
+            tout%doa_zener = doa_zener(tout%mat)
+            tout%doa_gebert = doa_gebert(tout%mat)
+            tout%opt_res = exec_opt(jj)
+
+            ! CALL spectral_norm(tout%mat, 6_mik, tout%spec_norm, ios)
+
+            IF(ios /= 0_ik) WRITE(std_out, FMT_ERR_AI0AxI0) &
+                    "Computing the Eigenvalue for domain ", tout%dmn, " failed."
+
             !------------------------------------------------------------------------------
             ! At the end of the second step, the results acutally get written to the 
             ! output variables that are then send back to my_rank=0 / main process.
@@ -697,8 +736,6 @@ END IF ! Worker processes since "ELSE"
 
 IF(my_rank == 0) THEN
 
-    write(*,*) "Calling them home."
-
     !------------------------------------------------------------------------------
     ! Wait for all processes
     !------------------------------------------------------------------------------
@@ -706,8 +743,6 @@ IF(my_rank == 0) THEN
     CALL print_err_stop(std_out, "MPI_WAITANY on req_list for IRECV of tglbl_res failed.", &
         INT(ierr, ik))
     
-    write(*,*) "Waiting."
-
     statInt = stop_workers(size_mpi)
 
     !------------------------------------------------------------------------------

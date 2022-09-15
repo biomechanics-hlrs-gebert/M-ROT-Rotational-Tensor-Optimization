@@ -106,6 +106,13 @@ ifeq ($(PE),gnu)
 		c_flags_f90 =  $(f90_std_IJ) $(f90_dev_flags)
 	endif
 endif
+#
+ifeq ($(SYS_ENV),julius)
+	libs=-llapack
+else
+	libs=-L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
+endif
+#
 # ------------------------------------------------------------------------------
 # Executable
 main_bin = $(bin_dir)$(bin_name)_$(trgt_vrsn)$(bin_suf)
@@ -177,7 +184,7 @@ $(main_bin): export_revision $(f-objects)
 	@echo "----------------------------------------------------------------------------------"
 	@echo '-- Final link step of $(long_name) executable'
 	@echo "----------------------------------------------------------------------------------"
-	$(compiler) $(f-objects) -o $(main_bin)
+	$(compiler) $(f-objects) $(libs) -o $(main_bin)
 	@echo
 	@echo "----------------------------------------------------------------------------------"
 	@echo "-- Successfully build all."
