@@ -646,7 +646,11 @@ ELSE
                 ! Optimization always begins at dig - (intervall * steps / 2._rk)
                 !------------------------------------------------------------------------------
                 IF(kk == 2_ik) THEN
-                    tin%mat = tout%mat
+                    !------------------------------------------------------------------------------
+                    ! DO NOT assign tin%mat = tout%mat since dig=tout%pos already is an absolute
+                    ! angle, refering to tin%mat (global coordinate system of the bone.)
+                    !------------------------------------------------------------------------------
+                    !!! tin%mat = tout%mat
                     dig = tout%pos
                 END IF
                 
