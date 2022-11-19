@@ -241,6 +241,8 @@ IF(my_rank == 0) THEN
         CALL print_err_stop(6, "No input file given", 1)
     END IF
 
+    CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
+
     !------------------------------------------------------------------------------
     ! Check and open the input file; Modify the Meta-Filename / Basename
     ! Define the new application name first
@@ -262,8 +264,6 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
     ! IF(std_out/=0) CALL meta_start_ascii(std_out, '.std_err')
-
-    CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
     IF(out_amount=="DEBUG") THEN
         WRITE(std_out, FMT_MSG) "Post mortem info probably in ./datasets/temporary.std_out"
@@ -369,7 +369,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ALLOCATE(tglbl_in(covo_no_lines-1_ik))
 
-    CALL parse_tensor_2nd_rank_R66(fh_covo, in%p_n_bsnm//TRIM(suf_covo), &
+    CALL parse_tensor_2nd_rank_R66(fh_covo, TRIM(in%p_n_bsnm)//TRIM(suf_covo), &
         covo_no_lines, tglbl_in, invalid_entries)
 
     IF (invalid_entries > 0) THEN
@@ -730,12 +730,10 @@ ELSE
             crs_counter = crs_counter + 1_mik
 
         END DO
-        ! write(*,*) "my rank: ", my_rank, " tin%dmn: ",tout%dmn, "END"
 
         CALL MPI_SEND(tlcl_res, INT(crs, mik), MPI_tensor_2nd_rank_R66, 0_mik, &
             INT(tout%dmn, mik), MPI_COMM_WORLD, ierr)
         CALL print_err_stop(std_out, "MPI_SEND on tlcl_res failed.", INT(ierr, ik))
-        ! write(*,*) "my rank: ", my_rank, " tin%dmn: ",tin%dmn, "SEND"
 
     END DO
 
