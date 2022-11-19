@@ -28,7 +28,7 @@ IMPLICIT NONE
 ! tout           Output tensor
 ! dog            Output angles
 !------------------------------------------------------------------------------  
-TYPE(tensor_2nd_rank_R66) :: tin, tout
+TYPE(domain_data) :: tin, tout
 REAL(rk), DIMENSION(3) :: dig, dog
 REAL(rk), DIMENSION(:,:,:), ALLOCATABLE :: crit
 

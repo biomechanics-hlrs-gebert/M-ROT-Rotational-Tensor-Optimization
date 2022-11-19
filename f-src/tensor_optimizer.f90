@@ -118,9 +118,9 @@ REAL(rk), PARAMETER :: lower_thres_percentage = 0.03
 REAL(rk), PARAMETER :: exec_thres = 0.0001
 
 ! Variables
-TYPE(tensor_2nd_rank_R66) :: dummy
-TYPE(tensor_2nd_rank_R66), DIMENSION(:), ALLOCATABLE :: tglbl_in, tlcl_res
-TYPE(tensor_2nd_rank_R66), DIMENSION(:,:), ALLOCATABLE :: tglbl_res
+TYPE(domain_data) :: dummy
+TYPE(domain_data), DIMENSION(:), ALLOCATABLE :: tglbl_in, tlcl_res
+TYPE(domain_data), DIMENSION(:,:), ALLOCATABLE :: tglbl_res
 
 TYPE(materialcard) :: bone
 
@@ -247,18 +247,21 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     global_meta_prgrm_mstr_app = 'rot'
     global_meta_program_keyword = 'ROT_TENSOR_OPT'
-    CALL meta_append(m_rry, size_mpi, stat)
-    
+    CALL meta_append(m_rry, size_mpi, binary, stat)
+
     !------------------------------------------------------------------------------
     ! Redirect std_out into a file in case std_out is not useful by environment.
     ! Place these lines before handle_lock_file :-)
     !------------------------------------------------------------------------------
-    std_out = determine_stout()
+    ! CALL determine_std_fh(std_out, std_err)
+    ! write(*,*) "std_out: ", std_out
+    ! write(*,*) "std_err: ", std_err
 
     !------------------------------------------------------------------------------
     ! Spawn standard out after(!) the basename is known
     !------------------------------------------------------------------------------
-    IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
+    ! IF(std_out/=6) CALL meta_start_ascii(std_out, '.std_out')
+    ! IF(std_out/=0) CALL meta_start_ascii(std_out, '.std_err')
 
     CALL show_title(["Johannes Gebert, M.Sc. (HLRS, NUM)"])
 
@@ -770,8 +773,6 @@ IF(my_rank == 0) THEN
     CALL meta_stop_ascii(fh_covo, suf_covo)
 
     CALL meta_write('ZERO_MATRICES', '(-)', zero_matrix_counter)
-
-    CALL meta_signing(binary)
 END IF ! (my_rank == 0)
 
 !------------------------------------------------------------------------------
@@ -785,7 +786,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Finish the program
     ! ------------------------------------------------------------------------------
-    CALL meta_close()
+    CALL meta_close(m_rry)
 
     CALL CPU_TIME(end)
 
@@ -810,7 +811,8 @@ IF(my_rank == 0) THEN
     WRITE(std_out, FMT_TXT) 'Program finished.'
     WRITE(std_out, FMT_TXT_SEP)
 
-    IF(std_out /= 6) CALL meta_stop_ascii(fh=std_out, suf='.std_out')
+    ! IF(std_out /= 6) CALL meta_stop_ascii(std_out, '.std_out')
+    ! IF(std_out /= 0) CALL meta_stop_ascii(std_err, '.std_err')
 
 END IF ! (my_rank == 0)
 

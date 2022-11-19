@@ -1,16 +1,16 @@
 
 p ROT_TENSOR_OPT
 
-r RESOLUTION_MONO      -1.                                             ! Resolution within space of orientations negative -> off
+r RESOLUTION_MONO       1.                                             ! Resolution within space of orientations negative -> off
 r RESOLUTION_ORTH       1.                                             ! Resolution within space of orientations negative -> off
-r RESOLUTION_ANI_1     -1.                                             ! Resolution within space of orientations negative -> off
-r RESOLUTION_ANI_2     -1.                                             ! Resolution within space of orientations negative -> off
+r RESOLUTION_ANI1       1.                                             ! Resolution within space of orientations negative -> off
+r RESOLUTION_ANI2       1.                                             ! Resolution within space of orientations negative -> off
 
-r EXPORT_DMN_CRIT       55                                             ! Criteria space as vtk. dmn=dmn -10=all other <0=no export
-r RESTART               N                                              ! Restart a (partly) computed project
+r EXPORT_DMN_CRIT       0                                              ! Criteria space as vtk. dmn=dmn -10=all other <0=no export
+r RESTART               Y                                              ! Restart a (partly) computed project
 
-r NEW_BSNM_FEATURE      RotOpt                                         ! Last segment of basename - NO '_'
-r NEW_BSNM_PURPOSE      Dev                                            ! 3rd segment of basename - NO '_'
+r NEW_BSNM_FEATURE      rot                                            ! Last segment of basename - NO '_'
+r NEW_BSNM_PURPOSE      dev                                            ! 3rd segment of basename - NO '_'
 
 ----------------------------------------------------------------------------------------------------
 
