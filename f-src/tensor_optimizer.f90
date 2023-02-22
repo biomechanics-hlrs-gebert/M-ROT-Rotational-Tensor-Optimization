@@ -148,8 +148,8 @@ INTEGER(mik), DIMENSION(MPI_STATUS_SIZE) :: stmpi
 INTEGER(mik), DIMENSION(:), ALLOCATABLE :: req_list, statInt
 
 INTEGER(mik) :: MPI_tensor_2nd_rank_R66
-INTEGER(mik), DIMENSION(24) :: blocklen, dtype 
-INTEGER(MPI_ADDRESS_KIND) :: disp(24), base
+INTEGER(mik), DIMENSION(25) :: blocklen, dtype 
+INTEGER(MPI_ADDRESS_KIND) :: disp(25), base
 
 
 LOGICAL :: abrt = .FALSE.
@@ -180,25 +180,26 @@ CALL MPI_GET_ADDRESS(dummy%dmn           , disp( 2), ierr)  ! Number of the cont
 CALL MPI_GET_ADDRESS(dummy%no_elems      , disp( 3), ierr)  ! Number of elements of the domain
 CALL MPI_GET_ADDRESS(dummy%no_nodes      , disp( 4), ierr)  ! Number of nodes of the domain
 CALL MPI_GET_ADDRESS(dummy%collected_logs, disp( 5), ierr)  ! Timestamps during domain computation
-CALL MPI_GET_ADDRESS(dummy%dmn_size      , disp( 6), ierr)  ! Size of the control volume
-CALL MPI_GET_ADDRESS(dummy%t_start       , disp( 7), ierr)  ! Start of the domain after program start (s)
-CALL MPI_GET_ADDRESS(dummy%t_duration    , disp( 8), ierr)  ! Duration of the computation of the domain (s)
-CALL MPI_GET_ADDRESS(dummy%phy_dmn_bnds  , disp( 9), ierr)  ! Physical domain boundaries (x,y,z - lo,hi)
-CALL MPI_GET_ADDRESS(dummy%opt_res       , disp(10), ierr)  ! Resolution the covo was optimized with
-CALL MPI_GET_ADDRESS(dummy%pos           , disp(11), ierr)  ! Position (deg) of alpha, eta, phi
-CALL MPI_GET_ADDRESS(dummy%sym           , disp(12), ierr)  ! Symmetry deviation (quotient)
-CALL MPI_GET_ADDRESS(dummy%DA            , disp(13), ierr)  ! Degree of anisotropy - Bone gold standard
-CALL MPI_GET_ADDRESS(dummy%bvtv          , disp(14), ierr)  ! Bone volume/total volume
-CALL MPI_GET_ADDRESS(dummy%gray_density  , disp(15), ierr)  ! Density based on grayscale values.
-CALL MPI_GET_ADDRESS(dummy%doa_zener     , disp(16), ierr)  ! Zener degree of anisotropy
-CALL MPI_GET_ADDRESS(dummy%doa_gebert    , disp(17), ierr)  ! Gebert degree of anisotropy (modified Zener)
-CALL MPI_GET_ADDRESS(dummy%mps           , disp(18), ierr)  ! Mean principal stiffness
-CALL MPI_GET_ADDRESS(dummy%spec_norm     , disp(19), ierr)  ! Gebert degree of anisotropy (modified Zener)
-CALL MPI_GET_ADDRESS(dummy%num           , disp(20), ierr)  ! An actual numerical stiffness tensor
-CALL MPI_GET_ADDRESS(dummy%mat           , disp(21), ierr)  ! An actual stiffness tensor
-CALL MPI_GET_ADDRESS(dummy%opt_crit      , disp(22), ierr)  ! Optimization information (e.g. criteria)
-CALL MPI_GET_ADDRESS(dummy%ma_el_type    , disp(23), ierr)  ! Optimization information (e.g. criteria)
-CALL MPI_GET_ADDRESS(dummy%mi_el_type    , disp(24), ierr)  ! Optimization information (e.g. criteria)
+CALL MPI_GET_ADDRESS(dummy%ma_el_order   , disp( 6), ierr)  ! Macro element type
+CALL MPI_GET_ADDRESS(dummy%dmn_size      , disp( 7), ierr)  ! Size of the control volume
+CALL MPI_GET_ADDRESS(dummy%t_start       , disp( 8), ierr)  ! Start of the domain after program start (s)
+CALL MPI_GET_ADDRESS(dummy%t_duration    , disp( 9), ierr)  ! Duration of the computation of the domain (s)
+CALL MPI_GET_ADDRESS(dummy%phy_dmn_bnds  , disp(10), ierr)  ! Physical domain boundaries (x,y,z - lo,hi)
+CALL MPI_GET_ADDRESS(dummy%opt_res       , disp(11), ierr)  ! Resolution the covo was optimized with
+CALL MPI_GET_ADDRESS(dummy%pos           , disp(12), ierr)  ! Position (deg) of alpha, eta, phi
+CALL MPI_GET_ADDRESS(dummy%sym           , disp(13), ierr)  ! Symmetry deviation (quotient)
+CALL MPI_GET_ADDRESS(dummy%DA            , disp(14), ierr)  ! Degree of anisotropy - Bone gold standard
+CALL MPI_GET_ADDRESS(dummy%bvtv          , disp(15), ierr)  ! Bone volume/total volume
+CALL MPI_GET_ADDRESS(dummy%gray_density  , disp(16), ierr)  ! Density based on grayscale values.
+CALL MPI_GET_ADDRESS(dummy%doa_zener     , disp(17), ierr)  ! Zener degree of anisotropy
+CALL MPI_GET_ADDRESS(dummy%doa_gebert    , disp(18), ierr)  ! Gebert degree of anisotropy (modified Zener)
+CALL MPI_GET_ADDRESS(dummy%mps           , disp(19), ierr)  ! Mean principal stiffness
+CALL MPI_GET_ADDRESS(dummy%spec_norm     , disp(20), ierr)  ! Gebert degree of anisotropy (modified Zener)
+CALL MPI_GET_ADDRESS(dummy%num8          , disp(21), ierr)  ! An actual numerical stiffness tensor (Macro HEXE8)
+CALL MPI_GET_ADDRESS(dummy%num20         , disp(22), ierr)  ! An actual numerical stiffness tensor (Macro HEXE20)
+CALL MPI_GET_ADDRESS(dummy%mat           , disp(23), ierr)  ! An actual stiffness tensor
+CALL MPI_GET_ADDRESS(dummy%opt_crit      , disp(24), ierr)  ! Optimization information (e.g. criteria)
+CALL MPI_GET_ADDRESS(dummy%mi_el_type    , disp(25), ierr)  ! Micro element type
 
 base = disp(1) 
 disp = disp - base 
@@ -211,28 +212,29 @@ blocklen(5)  = 24_mik
 blocklen(6)  = 1_mik
 blocklen(7)  = 1_mik
 blocklen(8)  = 1_mik
-blocklen(9)  = 6_mik
-blocklen(10) = 1_mik
-blocklen(11) = 3_mik
-blocklen(12) = 1_mik
+blocklen(9)  = 1_mik
+blocklen(10) = 6_mik
+blocklen(11) = 1_mik
+blocklen(12) = 3_mik
 blocklen(13) = 1_mik
 blocklen(14) = 1_mik
 blocklen(15) = 1_mik
-blocklen(16) = 1_mik 
+blocklen(16) = 1_mik
 blocklen(17) = 1_mik 
 blocklen(18) = 1_mik 
 blocklen(19) = 1_mik 
-blocklen(20) = 576_mik 
-blocklen(21) = 36_mik 
-blocklen(22) = INT(scl, mik)
-blocklen(23) = INT(scl, mik)
+blocklen(20) = 1_mik 
+blocklen(21) = 576_mik 
+blocklen(22) = 3600_mik 
+blocklen(23) = 36_mik 
 blocklen(24) = INT(scl, mik)
+blocklen(25) = INT(scl, mik)
 
-dtype(1:5)   = MPI_INTEGER8 
-dtype(6:21)  = MPI_DOUBLE_PRECISION
-dtype(22:24) = MPI_CHARACTER 
+dtype(1:6)   = MPI_INTEGER8 
+dtype(7:23)  = MPI_DOUBLE_PRECISION
+dtype(24:25) = MPI_CHARACTER 
 
-CALL MPI_TYPE_CREATE_STRUCT(24_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
+CALL MPI_TYPE_CREATE_STRUCT(25_mik, blocklen, disp, dtype, MPI_tensor_2nd_rank_R66, ierr) 
 CALL mpi_err(ierr,"MPI_tensor_2nd_rank_R66 couldn't be created.")
 
 CALL MPI_TYPE_COMMIT(MPI_tensor_2nd_rank_R66, ierr)
