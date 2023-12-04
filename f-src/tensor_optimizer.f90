@@ -116,6 +116,7 @@ IMPLICIT NONE
 CHARACTER(LEN=5), PARAMETER :: lower_thres_percentage_char = "<3% E"
 REAL(rk), PARAMETER :: lower_thres_percentage = 0.03
 REAL(rk), PARAMETER :: exec_thres = 0.0001
+INTEGER(ik), PARAMETER :: n_opt=11
 
 ! Variables
 TYPE(domain_data) :: dummy
@@ -126,17 +127,17 @@ TYPE(materialcard) :: bone
 
 CHARACTER(mcl), DIMENSION(:), ALLOCATABLE :: m_rry      
 CHARACTER(mcl) :: crit_file, cmd_arg_history='', stat=""
-CHARACTER(scl) :: restart, restart_cmd_arg, binary, dmn_no, suf_files(4), suf_covo
+CHARACTER(scl) :: restart, restart_cmd_arg, binary, dmn_no, suf_files(n_opt), suf_covo
 CHARACTER(  1) :: stg='1'
 CHARACTER(  8) :: date
 CHARACTER( 10) :: time
 
 REAL(rk) :: start, end, res_mono, res_orth, res_ani1, res_ani2
-REAL(rk), DIMENSION(2) :: step_width, swept_range
-REAL(rk), DIMENSION(3) :: dmn_size, spcng
-REAL(rk), DIMENSION(4) :: exec_opt
+REAL(rk), DIMENSION(2)  :: step_width, swept_range
+REAL(rk), DIMENSION(3)  :: dmn_size, spcng
+REAL(rk), DIMENSION(n_opt) :: exec_opt
 
-INTEGER(ik) :: fh_covo, no_stages, fh_files(4), &
+INTEGER(ik) :: fh_covo, no_stages, fh_files(n_opt), &
     exp_dmn_crit, covo_no_lines, zero_matrix_counter = 0, &
     ii, jj, kk, mm, xx, invalid_entries, iostat, steps(2,3)
 INTEGER(ik), DIMENSION(3) :: dims, grid
@@ -275,8 +276,6 @@ IF(my_rank == 0) THEN
     ! Place these lines before handle_lock_file :-)
     !------------------------------------------------------------------------------
     ! CALL determine_std_fh(std_out, std_err)
-    ! write(*,*) "std_out: ", std_out
-    ! write(*,*) "std_err: ", std_err
 
     !------------------------------------------------------------------------------
     ! Spawn standard out after(!) the basename is known
@@ -291,6 +290,15 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     ! Parse input
     !------------------------------------------------------------------------------
+    CALL meta_read('RESOLUTION_FTRI', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_HEX7', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_HEX6', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_TET7', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_TET6', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_CUBI', m_rry, res_mono, stat); CALL mest(stat, abrt)
+    CALL meta_read('RESOLUTION_TISO', m_rry, res_mono, stat); CALL mest(stat, abrt)
+
+
     CALL meta_read('RESOLUTION_MONO', m_rry, res_mono, stat); CALL mest(stat, abrt)
     CALL meta_read('RESOLUTION_ORTH', m_rry, res_orth, stat); CALL mest(stat, abrt)
     CALL meta_read('RESOLUTION_ANI1', m_rry, res_ani1, stat); CALL mest(stat, abrt)
@@ -338,8 +346,16 @@ IF(my_rank == 0) THEN
     exec_opt(3) = res_ani1; suf_files(3) = "an1" 
     exec_opt(4) = res_ani2; suf_files(4) = "an2" 
 
+    exec_opt( 5) = res_ani2; suf_files( 5) = "ftri" 
+    exec_opt( 6) = res_ani2; suf_files( 6) = "hex7" 
+    exec_opt( 7) = res_ani2; suf_files( 7) = "hex6" 
+    exec_opt( 8) = res_ani2; suf_files( 8) = "tet7" 
+    exec_opt( 9) = res_ani2; suf_files( 9) = "tet6" 
+    exec_opt(10) = res_ani2; suf_files(10) = "cubi" 
+    exec_opt(11) = res_ani2; suf_files(11) = "tiso" 
+
     crs = 0_mik
-    DO ii=1, 4
+    DO ii=1, n_opt
 
         fh_files(ii) = give_new_unit()
         
@@ -350,6 +366,7 @@ IF(my_rank == 0) THEN
             crs=crs+1_mik
             
             CALL meta_start_ascii(fh_files(ii), "."//TRIM(suf_files(ii))) 
+
         END IF
     END DO
 
@@ -395,15 +412,15 @@ IF(my_rank == 0) THEN
         WRITE(std_out, FMT_WRN_AI0AxI0) "", invalid_entries, " invalid domains."
     END IF
 
-    IF(covo_no_lines == invalid_entries+1_ik) THEN
+    ! IF(covo_no_lines == invalid_entries+1_ik) THEN
         
-        statInt = stop_workers(size_mpi)
+    !     statInt = stop_workers(size_mpi)
         
-        mssg = "No valid data found. Probably an implementation issue or an &
-            &invalid file format."
-        CALL print_err_stop(std_out, mssg, 1)
+    !     mssg = "No valid data found. Probably an implementation issue or an &
+    !         &invalid file format."
+    !     CALL print_err_stop(std_out, mssg, 1)
         
-    END IF
+    ! END IF
     !------------------------------------------------------------------------------
     ! Allocate global results array. Need to loop over exec_opt 
     ! to properly assign the tglbl_res(entries, :)
@@ -417,13 +434,13 @@ END IF ! (my_rank == 0)
 ! But only the p_n_bsnm/path are used and they are used rarely. Therefore not
 ! considered as a major issue.
 !------------------------------------------------------------------------------
-CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(out%path    , INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(suf_files   , INT(scl*4_ik, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(restart, 1_mik, MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(exec_opt, 4_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
-CALL MPI_BCAST(exp_dmn_crit, 1_mik, MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST( in%p_n_bsnm, INT(meta_mcl, mik),  MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(out%path    , INT(meta_mcl, mik),  MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(out%p_n_bsnm, INT(meta_mcl, mik),  MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(suf_files   , INT(scl*n_opt, mik), MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(restart,      1_mik,               MPI_CHAR, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(exec_opt,     INT(n_opt,mik),      MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
+CALL MPI_BCAST(exp_dmn_crit, 1_mik,               MPI_INTEGER8, 0_mik, MPI_COMM_WORLD, ierr)
 CALL MPI_BCAST(crs, 1_mik, MPI_INTEGER, 0_mik, MPI_COMM_WORLD, ierr)
 
 CALL MPI_BCAST(dmn_size, 3_mik, MPI_DOUBLE_PRECISION, 0_mik, MPI_COMM_WORLD, ierr)
@@ -615,7 +632,7 @@ ELSE
         ! Loop over modes
         !------------------------------------------------------------------------------
         mm=0_ik
-        DO jj = 1_ik, 4_ik
+        DO jj = 1_ik, n_opt
 
             !------------------------------------------------------------------------------
             ! Cycle if criteria is not requested. Is as good as any other if/else.
@@ -626,7 +643,7 @@ ELSE
             ! The optimization is done in two steps if the chosen step size is too small.
             ! If the user chooses a large step size, then one stage is sufficient.
             ! Done this way to shorten turnaround times
-            !------------------------------------------------------------------------------
+            ! ------------------------------------------------------------------------------
             IF (exec_opt(jj) < 2._rk) THEN
                 no_stages = 2_ik
                 
@@ -639,8 +656,8 @@ ELSE
                 no_stages = 1_ik
 
                 ! All entries assigned to help preventing unintended situations.
-                swept_range(1) = 180._rk
-                swept_range(2) = 180._rk
+                swept_range(1) = 360._rk
+                swept_range(2) = 360._rk
 
                 step_width(1) = exec_opt(jj)
                 step_width(2) = exec_opt(jj)
@@ -776,7 +793,7 @@ IF(my_rank == 0) THEN
     !------------------------------------------------------------------------------
     crs_counter = 0_mik
     
-    DO jj = 1_ik, 4_ik
+    DO jj = 1_ik, n_opt
         
         IF(exec_opt(jj) <= exec_thres) CYCLE
 

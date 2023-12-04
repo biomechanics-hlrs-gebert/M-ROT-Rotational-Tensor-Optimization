@@ -54,14 +54,16 @@ REAL(rk), INTENT(IN):: range, resolution
 
 INTEGER(ik) :: ii, jj, kk, best_position(3), steps
 
-REAL(rk) :: min, alpha, eta, phi, offset
-REAL(rk), DIMENSION(6,6) :: tmp_mat, mask
+REAL(rk) :: alpha, eta, phi, offset
+REAL(rk), DIMENSION(6,6) :: CC, mask
+
+LOGICAL :: opt_val_min = .FALSE.
 
 !----------------------------------------------------------------------------------------------
 ! Initialize variables
 !----------------------------------------------------------------------------------------------
 mask = 0_ik
-min = 10E09_ik
+
 
 !----------------------------------------------------------------------------------------------
 ! Choose between monotropic or orthotropic optimization
@@ -100,7 +102,68 @@ SELECT CASE(TRIM(ADJUSTL(mode)))
     ! [   0 ,   0 ,   0 , | S_54, S_55,   0  ]           [   0 ,   0 ,   0 , |   0 , S_55,   0  ] 
     ! [ S_61, S_62, S_63, |   0 ,   0 , S_66 ]           [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ] 
     !
+    ! Hexagonal [7]
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, | S_14, S_15,   0  ]           S_11=S_22                S_11-S_22 = 0
+    ! [ S_21, S_11, S_13, | S_24, S_25,   0  ]           S_23=S_13                S_23-S_13 = 0
+    ! [ S_31, S_32, S_33, |   0 ,   0 ,   0  ]          -S_24=S_56=S_14          -S_24-S_56 = 0   S_56-S_14 = 0  -S_24-S_14 = 0
+    ! --------------------|-------------------           S_44=S_55                
+    ! [ S_41, S_42,   0 , | S_44,   0 , S_46 ]           S_66=1/2(S_11-S_12)      S_66-1/2(S_11-S_12) = 0
+    ! [ S_51, S_52,   0 , |   0 , S_55, S_56 ]           S_25=S_46=-S_15          S_25-S_46 = 0   S_25+S_15 = 0   S_46+S_15 = 0
+    ! [   0 ,   0 ,   0 , | S_64, S_65, S_66 ]
+    !
+    ! Hexagonal [6]
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, | S_14,   0 ,   0  ]           S_11=S_22                S_11-S_22 = 0
+    ! [ S_21, S_11, S_13, | S_24,   0 ,   0  ]           S_23=S_13                S_23-S_13 = 0
+    ! [ S_31, S_32, S_33, |   0 ,   0 ,   0  ]          -S_24=S_56=S_14          -S_24-S_56 = 0   S_56-S_14 = 0  -S_24-S_14 = 0
+    ! --------------------|-------------------           S_44=S_55                
+    ! [ S_41, S_42,   0 , | S_44,   0 ,   0  ]           S_66=1/2(S_11-S_12)      S_66-1/2(S_11-S_12) = 0
+    ! [   0 ,   0 ,   0 , |   0 , S_55, S_56 ] 
+    ! [   0 ,   0 ,   0 , |   0 , S_65, S_66 ]            
+    !
+    ! Tetragonal [7]
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, | S_14,   0 ,   0  ]           S_24=-S_14               S_24+S_14 = 0
+    ! [ S_21, S_22, S_23, | S_24,   0 ,   0  ]           S_55=S_44                S_55-S_44 = 0
+    ! [ S_31, S_32, S_33, |   0 ,   0 ,   0  ]           S_22=S_11                S_22-S_11 = 0
+    ! --------------------|-------------------           S_23=S_13                S_23-S_13 = 0
+    ! [ S_41, S_42,   0 , | S_44,   0 ,   0  ]           
+    ! [   0 ,   0 ,   0 , |   0 , S_55,   0  ]           
+    ! [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ]           
+    !
+    ! Tetragonal [6]
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, |   0 ,   0 ,   0  ]           
+    ! [ S_21, S_22, S_23, |   0 ,   0 ,   0  ]           S_55=S_44                S_55-S_44 = 0
+    ! [ S_31, S_32, S_33, |   0 ,   0 ,   0  ]           S_22=S_11                S_22-S_11 = 0
+    ! --------------------|-------------------           S_23=S_13                S_23-S_13 = 0
+    ! [   0 ,   0 ,   0 , | S_44,   0 ,   0  ]           
+    ! [   0 ,   0 ,   0 , |   0 , S_55,   0  ]           
+    ! [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ]           
+    !
+    ! Cubic
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, |   0 ,   0 ,   0  ]           S_11=S_33                S_11-S_33 = 0 
+    ! [ S_21, S_22, S_23, |   0 ,   0 ,   0  ]           S_55=S_44                S_55-S_44 = 0
+    ! [ S_31, S_32, S_33, |   0 ,   0 ,   0  ]           S_22=S_11                S_22-S_11 = 0
+    ! --------------------|-------------------           S_23=S_13                S_23-S_13 = 0
+    ! [   0 ,   0 ,   0 , | S_44,   0 ,   0  ]           S_12=S_13                S_12-S_13          
+    ! [   0 ,   0 ,   0 , |   0 , S_55,   0  ]           S_44=S_66                S_44-S_66
+    ! [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ]           
+    !
+    ! Transverse isotropy
+    !                                                                                                                                                                                
+    ! [ S_11, S_12, S_13, |   0 ,   0 ,   0  ]           S_11=S_22                S_11-S_22 = 0
+    ! [ S_21, S_11, S_13, |   0 ,   0 ,   0  ]           S_23=S_13                S_23-S_13 = 0
+    ! [ S_31, S_32, S_33, |   0 ,   0 ,   0  ]          
+    ! --------------------|-------------------           S_44=S_55                
+    ! [   0 ,   0 ,   0 , | S_44,   0 ,   0  ]           S_66=1/2(S_11-S_12)      S_66-1/2(S_11-S_12) = 0
+    ! [   0 ,   0 ,   0 , |   0 , S_55,   0  ] 
+    ! [   0 ,   0 ,   0 , |   0 ,   0 , S_66 ]            
+    !
     !----------------------------------------------------------------------------------------------
+    !
     ! At the monotropic and the orthotropic optimization, the zero entries are minimized. 
     ! 
     ! Example orthotropic: The 1st and the 3rd quadrant must be 0.
@@ -111,24 +174,83 @@ SELECT CASE(TRIM(ADJUSTL(mode)))
     ! The matrix mask needs no recurring initialization, as the values mustn't change during 
     ! optimization (program runtime in general).
     !----------------------------------------------------------------------------------------------
+    CASE('ftri') 
+        opt_val_min = .FALSE.
+
+        mask(:,1)=[ 2_ik, 0_ik, 0_ik,    0_ik, 0_ik, 0_ik   ]
+        mask(:,2)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 0_ik   ]
+        mask(:,3)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 0_ik   ]
+
+        mask(:,4)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 0_ik   ]
+        mask(:,5)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 0_ik   ]
+        mask(:,6)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 0_ik   ]
+
     CASE('mono')
-        mask(1:4,5:6) = 2_ik
+        opt_val_min = .TRUE.
 
-    CASE('orth')
-        ! Explanation @ opt_stiff_mono
-        mask(1:3,4:6) = 2_ik
-        mask(  4,5:6) = 2_ik
-        mask(  5,  6) = 2_ik
+        mask(:,1)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,2)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,3)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
 
+        mask(:,4)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,5)=[ 1_ik, 1_ik, 1_ik,    1_ik, 0_ik, 0_ik   ]
+        mask(:,6)=[ 1_ik, 1_ik, 1_ik,    1_ik, 0_ik, 0_ik   ]
+
+    CASE('orth','cubi','tiso','tet6')
+        opt_val_min = .TRUE.
+
+        mask(:,1)=[ 0_ik, 0_ik, 0_ik,    1_ik, 1_ik, 1_ik   ]
+        mask(:,2)=[ 0_ik, 0_ik, 0_ik,    1_ik, 1_ik, 1_ik   ]
+        mask(:,3)=[ 0_ik, 0_ik, 0_ik,    1_ik, 1_ik, 1_ik   ]
+
+        mask(:,4)=[ 1_ik, 1_ik, 1_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,5)=[ 1_ik, 1_ik, 1_ik,    1_ik, 0_ik, 1_ik   ]
+        mask(:,6)=[ 1_ik, 1_ik, 1_ik,    1_ik, 1_ik, 0_ik   ]
+
+    CASE('hex7')
+        opt_val_min = .TRUE.
+  
+        mask(:,1)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 1_ik   ]
+        mask(:,2)=[ 0_ik, 0_ik, 0_ik,    0_ik, 0_ik, 1_ik   ]
+        mask(:,3)=[ 0_ik, 0_ik, 0_ik,    1_ik, 1_ik, 1_ik   ]
+
+        mask(:,4)=[ 0_ik, 0_ik, 1_ik,    0_ik, 1_ik, 0_ik   ]
+        mask(:,5)=[ 0_ik, 0_ik, 1_ik,    1_ik, 0_ik, 0_ik   ]
+        mask(:,6)=[ 1_ik, 1_ik, 1_ik,    0_ik, 0_ik, 0_ik   ]
+
+    CASE('hex6') 
+        opt_val_min = .TRUE.
+    
+        mask(:,1)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,2)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,3)=[ 0_ik, 0_ik, 0_ik,    1_ik, 1_ik, 1_ik   ]
+
+        mask(:,4)=[ 0_ik, 0_ik, 1_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,5)=[ 1_ik, 1_ik, 1_ik,    1_ik, 0_ik, 0_ik   ]
+        mask(:,6)=[ 1_ik, 1_ik, 1_ik,    1_ik, 0_ik, 0_ik   ]
+
+    CASE('tet7')
+        opt_val_min = .TRUE.
+      
+        mask(:,1)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,2)=[ 0_ik, 0_ik, 0_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,3)=[ 0_ik, 0_ik, 0_ik,    1_ik, 1_ik, 1_ik   ]
+
+        mask(:,4)=[ 0_ik, 0_ik, 1_ik,    0_ik, 1_ik, 1_ik   ]
+        mask(:,5)=[ 1_ik, 1_ik, 1_ik,    1_ik, 0_ik, 1_ik   ]
+        mask(:,6)=[ 1_ik, 1_ik, 1_ik,    1_ik, 1_ik, 0_ik   ]
+        
     CASE('an1')
+        opt_val_min = .FALSE.
         ! S11 available only once.
-        mask(1,1) = 1_ik
+        mask(1,1) = 2_ik
 
     CASE('an2')
+        opt_val_min = .FALSE.
         ! S_11, S_22, S_33 available only once.
-        mask(1,1) = 1_ik
-        mask(2,2) = 1_ik
-        mask(3,3) = 1_ik
+        mask(1,1) = 2_ik
+        mask(2,2) = 2_ik
+        mask(3,3) = 2_ik
 
     CASE DEFAULT
         mssg = "No valid optimization chosen. Check your implementation!"
@@ -181,14 +303,72 @@ DO kk = 1_ik, steps
 
             ! IF ((alpha < -45)  .OR. (alpha > 45)) CYCLE
 
-            CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , tmp_mat)
+            CALL transpose_mat (tin%mat, [ alpha, eta, phi ] , CC)
 
             !-------------------------------------------------------------------------------
             ! Criteria: Entries that are not zero after multiplication with mask are 
             ! squared and summed up. Integer power (**2) is quicker than real power (**2.0).
             ! https://twitter.com/fortrantip/status/1478765410405298176?s=24
             !-------------------------------------------------------------------------------
-            crit(ii, jj, kk) = SUM((tmp_mat * mask)**2_ik)  
+            
+            SELECT CASE(TRIM(ADJUSTL(mode)))
+            CASE('ftri','mono','orth','an1','an2')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik)  
+        
+            CASE('hex7')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik) + &
+                    ( CC(1,1) - CC(2,2))**2 + &
+                    ( CC(2,3) - CC(1,3))**2 + &
+                    (-CC(2,4) - CC(5,6))**2 + &
+                    ( CC(5,6) - CC(1,4))**2 + &
+                    (-CC(2,4) - CC(1,4))**2 + &
+                    ( CC(4,4) - CC(5,5))**2 + &
+                    ( CC(6,6) - ANINT(0.5_rk*(CC(1,1)-CC(1,2)), ik))**2 + &
+                    ( CC(2,5) - CC(4,6))**2 + &
+                    ( CC(2,5) + CC(1,5))**2 + &
+                    ( CC(4,6) + CC(1,5))**2
+
+            CASE('hex6')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik) + &
+                    ( CC(1,1) - CC(2,2))**2 + &
+                    ( CC(2,3) - CC(1,3))**2 + &
+                    (-CC(2,4) - CC(5,6))**2 + &
+                    ( CC(5,6) - CC(1,4))**2 + &
+                    (-CC(2,4) - CC(1,4))**2 + &
+                    ( CC(4,4) - CC(5,5))**2 + &
+                    ( CC(6,6) - ANINT(0.5_rk*(CC(1,1)-CC(1,2)), ik))**2
+        
+            CASE('tet7')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik) + &
+                    ( CC(2,4) + CC(1,4))**2 + &
+                    ( CC(5,5) - CC(4,4))**2 + &
+                    ( CC(2,2) - CC(1,1))**2 + &
+                    ( CC(2,3) - CC(1,3))**2
+        
+            CASE('tet6')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik) + &
+                    ( CC(5,5) - CC(4,4))**2 + &
+                    ( CC(2,2) - CC(1,1))**2 + &
+                    ( CC(2,3) - CC(1,3))**2
+        
+            CASE('cubi')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik) + &
+                    ( CC(1,1) - CC(3,3))**2 + &
+                    ( CC(1,1) - CC(2,2))**2 + &
+                    ( CC(5,5) - CC(4,4))**2 + &
+                    ( CC(2,3) - CC(1,3))**2 + &
+                    ( CC(1,2) - CC(1,3))**2 + &
+                    ( CC(4,4) - CC(6,6))**2
+
+            CASE('tiso')
+                crit(ii, jj, kk) = SUM((CC * mask)**2_ik) + &
+                    ( CC(1,1) - CC(2,2))**2 + &
+                    ( CC(2,3) - CC(1,3))**2 + &
+                    ( CC(4,4) - CC(5,5))**2 + &
+                    ( CC(6,6) - ANINT(0.5_rk*(CC(1,1)-CC(1,2)), ik))**2
+        
+            END SELECT
+
 
         alpha = alpha + resolution
         END DO
@@ -202,10 +382,11 @@ END DO
 !-------------------------------------------------------------------------------
 ! Find the best position (min or max) within the criteria space.
 !-------------------------------------------------------------------------------
-SELECT CASE(TRIM(ADJUSTL(mode)))
-    CASE('mono', 'orth'); best_position = MINLOC(crit(:, :, :))
-    CASE('an1', 'an2'); best_position = MAXLOC(crit(:, :, :))
-END SELECT
+IF (opt_val_min) THEN
+    best_position = MINLOC(crit(:, :, :))
+ELSE
+    best_position = MAXLOC(crit(:, :, :))
+END IF 
 
 !-------------------------------------------------------------------------------
 ! Calculate the angles of the best position again. 
